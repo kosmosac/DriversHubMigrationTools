@@ -10,6 +10,7 @@ from pathlib import Path
 from .assess import assess
 from .env import read_env
 from .exporter import export_source
+from .verify import verify_export
 
 
 def parser() -> argparse.ArgumentParser:
@@ -43,6 +44,14 @@ def parser() -> argparse.ArgumentParser:
         "export", help="Export currently supported source data"
     )
     common(export_command)
+    verify_command = commands.add_parser(
+        "verify", help="Verify files and checksums in a migration directory"
+    )
+    verify_command.add_argument(
+        "--output",
+        type=Path,
+        help="migration directory; overrides DRIVERSHUB_MIGRATION_DIRECTORY",
+    )
     return result
 
 
@@ -63,6 +72,16 @@ def main(argv: list[str] | None = None) -> int:
         if normalized in {"0", "false", "no", "off"}:
             return False
         raise SystemExit(f"{name} must be true or false")
+
+    if args.command == "verify":
+        output_value = args.output or setting("DRIVERSHUB_MIGRATION_DIRECTORY")
+        if not output_value:
+            raise SystemExit(
+                "Set DRIVERSHUB_MIGRATION_DIRECTORY in .env or use --output"
+            )
+        report = verify_export(Path(output_value))
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+        return 0 if report["state"] == "complete" else 1
 
     if args.command in {"assess", "export"}:
         source = args.source or setting("DRIVERSHUB_SOURCE_URL")

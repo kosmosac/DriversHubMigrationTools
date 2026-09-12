@@ -6,9 +6,8 @@ administrator account. The destination is expected to be under the operator's
 control.
 
 The project is in an early implementation stage. It currently provides a
-read-only source assessment and an initial export of configuration, branding,
-users, members, and current bans. Other source data and destination import are
-not yet available.
+read-only source assessment and a resumable export of the supported source
+data. Destination import is not yet available.
 
 See [DESIGN.md](DESIGN.md) for the planned migration coverage, limitations, and
 implementation stages.
@@ -116,6 +115,23 @@ Enabled standard plugins are detected from the frontend configuration. The
 source API does not expose its complete external-plugin list. The report marks
 external-plugin detection as partial instead of treating undetected plugins as
 absent.
+
+The audit log is not exported because its endpoint does not accept application
+tokens. Passwords, MFA secrets, OAuth tokens, sessions, deleted deliveries,
+private user settings, and data owned only by unavailable external plugins are
+also outside the accessible source data.
+
+## Verify an export
+
+Before transferring or importing a migration directory, verify its manifest,
+files, and checksums:
+
+```bash
+.venv/bin/drivershub-migrate verify
+```
+
+This command does not contact the source Hub. It exits with a nonzero status if
+the manifest is invalid, a referenced file is missing, or a checksum differs.
 
 ## Development
 
