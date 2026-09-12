@@ -181,7 +181,9 @@ downloads.
 HTTP GET does not always mean that the source remains unchanged:
 
 - `GET /dlog/{logid}` increments the delivery view counter.
-- Some authenticated list operations update the administrator's activity.
+- Some authenticated list operations update the administrator's activity. The
+  exporter must not send authentication to public endpoints that do not
+  require it.
 
 Bulk delivery-detail collection must be disabled by default. The operator must
 explicitly accept the view-counter changes before the exporter uses that

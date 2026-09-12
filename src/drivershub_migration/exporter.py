@@ -15,9 +15,14 @@ from .storage import WorkJournal, atomic_write, sha256, write_json
 
 ASSETS = ("logo", "banner", "bgimage")
 PAGINATED_RESOURCES = (
-    ("users", "user/list", {"order_by": "uid", "order": "asc"}),
-    ("members", "member/list", {"order_by": "userid", "order": "asc"}),
-    ("bans", "user/ban/list", {"order_by": "uid", "order": "asc"}),
+    ("users", "user/list", {"order_by": "uid", "order": "asc"}, None),
+    (
+        "members",
+        "member/list",
+        {"order_by": "userid", "order": "asc"},
+        "Updates the requesting administrator's activity.",
+    ),
+    ("bans", "user/ban/list", {"order_by": "uid", "order": "asc"}, None),
 )
 
 
@@ -163,7 +168,14 @@ def export_source(
             assets[name] = value
 
     resources: dict[str, object] = {}
-    for name, relative_url, query in PAGINATED_RESOURCES:
+    for name, relative_url, query, source_side_effect in PAGINATED_RESOURCES:
+        if source_side_effect and not allow_source_side_effects:
+            resources[name] = {
+                "state": "skipped",
+                "reason": "Set DRIVERSHUB_ALLOW_SOURCE_SIDE_EFFECTS=true to permit this request.",
+                "source_side_effect": source_side_effect,
+            }
+            continue
         resources[name] = export_paginated(
             name=name,
             source=source,
@@ -173,6 +185,8 @@ def export_source(
             journal=journal,
             query=query,
         )
+        if source_side_effect:
+            resources[name]["source_side_effect"] = source_side_effect
 
     if allow_source_side_effects:
         resources["profiles"] = _export_profiles(

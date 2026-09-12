@@ -58,7 +58,11 @@ def assess(
 ) -> dict[str, object]:
     source = normalize_api_url(source)
     authorization = f"Application {token}" if token else None
-    client = HttpClient(authorization, minimum_interval=request_interval)
+    authenticated_client = HttpClient(
+        authorization,
+        minimum_interval=request_interval,
+    )
+    public_client = HttpClient(None, minimum_interval=request_interval)
     journal = WorkJournal(output)
     raw_directory = output / "raw" / "assessment"
     results: dict[str, object] = {}
@@ -75,6 +79,7 @@ def assess(
             continue
         url = urljoin(source, relative_url)
         try:
+            client = authenticated_client if authenticated else public_client
             response = client.get(url)
         except RequestFailed as exc:
             status = exc.response.status if exc.response else None
