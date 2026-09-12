@@ -11,6 +11,7 @@ from .assess import assess
 from .env import read_env
 from .exporter import export_source
 from .import_plan import create_import_plan
+from .target import preflight_target
 from .verify import verify_export
 
 
@@ -61,6 +62,19 @@ def parser() -> argparse.ArgumentParser:
         type=Path,
         help="migration directory; overrides DRIVERSHUB_MIGRATION_DIRECTORY",
     )
+    target_command = commands.add_parser(
+        "preflight-target", help="Inspect a Docker AIO destination without modifying it"
+    )
+    target_command.add_argument(
+        "--output",
+        type=Path,
+        help="migration directory; overrides DRIVERSHUB_MIGRATION_DIRECTORY",
+    )
+    target_command.add_argument(
+        "--target",
+        type=Path,
+        help="Docker AIO directory; overrides DRIVERSHUB_TARGET_DIRECTORY",
+    )
     return result
 
 
@@ -98,6 +112,22 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(str(exc)) from exc
         print(json.dumps(report, indent=2, ensure_ascii=False))
         return 0 if report["state"] == "complete" else 1
+
+    if args.command == "preflight-target":
+        output_value = args.output or setting("DRIVERSHUB_MIGRATION_DIRECTORY")
+        target_value = args.target or setting("DRIVERSHUB_TARGET_DIRECTORY")
+        if not output_value:
+            raise SystemExit(
+                "Set DRIVERSHUB_MIGRATION_DIRECTORY in .env or use --output"
+            )
+        if not target_value:
+            raise SystemExit("Set DRIVERSHUB_TARGET_DIRECTORY in .env or use --target")
+        try:
+            report = preflight_target(Path(output_value), Path(target_value))
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+        return 0 if report["state"] in {"complete", "action-required"} else 1
 
     if args.command in {"assess", "export"}:
         source = args.source or setting("DRIVERSHUB_SOURCE_URL")

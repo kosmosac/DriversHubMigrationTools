@@ -155,6 +155,22 @@ Accounts without Steam, Discord, or a valid email address are listed as
 requiring manual recovery. No destination is contacted or modified at this
 stage.
 
+## Inspect the destination
+
+Set `DRIVERSHUB_TARGET_DIRECTORY` to an initialized Drivers Hub Docker AIO
+directory. Its MariaDB service must be running. Then inspect its existing user
+accounts without modifying them:
+
+```bash
+.venv/bin/drivershub-migrate preflight-target
+```
+
+The command reads the database through `docker compose exec` and writes
+`target-preflight.json`. It does not assume fixed IDs for the destination
+administrator. Every existing destination account is reported for an explicit
+preserve-or-merge decision. Source `uid` and `userid` values remain unchanged
+in either case.
+
 ## Development
 
 Run the test suite with the Python standard library:
