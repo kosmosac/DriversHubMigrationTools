@@ -193,6 +193,125 @@ def _normalized_records(output: Path, name: str) -> list[object]:
     return records if isinstance(records, list) else []
 
 
+def _export_economy_balances(
+    source: str,
+    output: Path,
+    client: HttpClient,
+    journal: WorkJournal,
+) -> dict[str, object]:
+    userids = {-1000}
+    for resource in ("users", "members"):
+        for record in _normalized_records(output, resource):
+            if isinstance(record, dict) and isinstance(record.get("userid"), int):
+                userids.add(record["userid"])
+
+    records: list[dict[str, object]] = []
+    failures: list[dict[str, object]] = []
+    raw_directory = output / "raw" / "economy-balances"
+    for userid in sorted(userids):
+        key = f"economy-balances/userid/{userid}"
+        path = raw_directory / f"userid-{userid}.json"
+        balance = None
+        if journal.completed(key) and path.exists():
+            try:
+                balance = json.loads(path.read_bytes())
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                balance = None
+        url = urljoin(source, f"economy/balance/{userid}")
+        if balance is None:
+            try:
+                response = client.get(url)
+                balance = response.json()
+                if not isinstance(balance, dict) or not isinstance(
+                    balance.get("balance"), (int, float)
+                ):
+                    raise ValueError("The response does not contain a balance")
+            except (RequestFailed, ValueError) as exc:
+                response = exc.response if isinstance(exc, RequestFailed) else None
+                failure = {
+                    "state": "failed",
+                    "userid": userid,
+                    "url": url,
+                    "status": response.status if response else None,
+                    "error": str(exc),
+                }
+                journal.record(key, failure)
+                failures.append(failure)
+                continue
+            atomic_write(path, response.body)
+            journal.record(
+                key,
+                {
+                    "state": "complete",
+                    "userid": userid,
+                    "url": url,
+                    "status": response.status,
+                    "content_type": response.content_type,
+                    "path": str(path.relative_to(output)),
+                    "sha256": sha256(response.body),
+                },
+            )
+        records.append({"userid": userid, **balance})
+
+    normalized_path = output / "normalized" / "economy-balances.json"
+    write_json(
+        normalized_path,
+        {"format_version": 1, "resource": "economy-balances", "records": records},
+    )
+    return {
+        "state": "complete" if not failures and len(records) == len(userids) else "incomplete",
+        "items": len(records),
+        "expected_items": len(userids),
+        "path": str(normalized_path.relative_to(output)),
+        "sha256": sha256(normalized_path.read_bytes()),
+        "failures": failures,
+    }
+
+
+def _export_economy(
+    *,
+    source: str,
+    output: Path,
+    client: HttpClient,
+    journal: WorkJournal,
+    allow_source_side_effects: bool,
+) -> dict[str, object]:
+    result: dict[str, object] = {
+        "state": "partial",
+        "configuration": "Included in the administrative backend configuration.",
+        "balances": _export_economy_balances(source, output, client, journal),
+    }
+    inventories = (
+        ("trucks", "economy/trucks/list", {"order_by": "vehicleid", "order": "asc"}),
+        ("garages", "economy/garages/list", {"order_by": "garageid", "order": "asc"}),
+        ("merch", "economy/merch/list", {"order_by": "itemid", "order": "asc"}),
+    )
+    for name, relative_url, query in inventories:
+        if allow_source_side_effects:
+            result[name] = export_paginated(
+                name=f"economy-{name}",
+                source=source,
+                relative_url=relative_url,
+                output=output,
+                client=client,
+                journal=journal,
+                query=query,
+            )
+            result[name]["source_side_effect"] = (
+                "Updates the requesting administrator's activity."
+            )
+        else:
+            result[name] = {
+                "state": "skipped",
+                "reason": "Set DRIVERSHUB_ALLOW_SOURCE_SIDE_EFFECTS=true to permit this request.",
+                "source_side_effect": "Updates the requesting administrator's activity.",
+            }
+    result["reason"] = (
+        "Transaction histories and individual garage slots are not exported yet."
+    )
+    return result
+
+
 def _export_plugins(
     *,
     source: str,
@@ -384,6 +503,16 @@ def export_source(
         enabled_plugins=capabilities["standard_plugins"],
         allow_source_side_effects=allow_source_side_effects,
     )
+    if "economy" in capabilities["standard_plugins"]:
+        plugin_resources["economy"] = _export_economy(
+            source=source,
+            output=output,
+            client=client,
+            journal=journal,
+            allow_source_side_effects=allow_source_side_effects,
+        )
+    else:
+        plugin_resources["economy"] = {"state": "disabled"}
 
     deliveries: dict[str, object] = {
         "csv": _export_delivery_csv(source, output, client, journal),
