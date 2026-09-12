@@ -25,15 +25,17 @@ class ImportPlanTests(unittest.TestCase):
                 [
                     {"uid": 1, "userid": -1, "name": "One", "steamid": "123"},
                     {"uid": 2, "userid": -1, "name": "Two", "discordid": "456"},
-                    {"uid": 3, "userid": 7, "name": "Three"},
+                    {"uid": 3, "userid": 7, "name": "Three", "email": "three@example.com"},
+                    {"uid": 4, "userid": 8, "name": "Four"},
                 ],
             )
             result = create_import_plan(directory)
             self.assertEqual(result["state"], "complete")
-            self.assertEqual(result["summary"]["claimable"], 2)
+            self.assertEqual(result["summary"]["claimable"], 3)
             self.assertEqual(result["summary"]["manual_recovery_required"], 1)
             self.assertEqual(result["accounts"][0]["target_uid"], 1)
             self.assertEqual(result["accounts"][0]["claim_methods"], ["steam"])
+            self.assertEqual(result["accounts"][2]["claim_methods"], ["email"])
 
     @patch("drivershub_migration.import_plan.verify_export")
     def test_blocks_duplicate_claim_identity(self, verify):
@@ -50,6 +52,22 @@ class ImportPlanTests(unittest.TestCase):
             result = create_import_plan(directory)
             self.assertEqual(result["state"], "blocked")
             self.assertEqual(result["conflicts"][0]["field"], "steamid")
+
+    @patch("drivershub_migration.import_plan.verify_export")
+    def test_blocks_duplicate_email_case_insensitively(self, verify):
+        verify.return_value = {"state": "complete"}
+        with TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            self._write_profiles(
+                directory,
+                [
+                    {"uid": 1, "userid": 1, "email": "User@example.com"},
+                    {"uid": 2, "userid": 2, "email": "user@example.com"},
+                ],
+            )
+            result = create_import_plan(directory)
+            self.assertEqual(result["state"], "blocked")
+            self.assertEqual(result["conflicts"][0]["field"], "email")
 
 
 if __name__ == "__main__":

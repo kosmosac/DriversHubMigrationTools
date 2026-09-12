@@ -408,7 +408,8 @@ Identity evidence should be evaluated in this order:
 
 1. Steam ID;
 2. Discord ID;
-3. manual operator decision.
+3. control of the imported email address through password reset;
+4. manual operator decision.
 
 Names and avatar URLs are not stable identities. The importer must stop on a
 conflict and must not combine accounts automatically.
@@ -426,14 +427,18 @@ does not create a second account.
 - Existing sessions cannot be restored.
 - Discord and Steam users authenticate again through their external identity
   when the destination integration is configured correctly.
-- Email is reconnected and verified after the claim; it is not a claim method.
+- Email is restored without a password. With working destination SMTP, the
+  existing password-reset flow proves control of the address and creates a new
+  password, making email a third claim method.
 - TruckersMP IDs can be retained as account data, but they are not an
   authentication method.
-- Accounts without a Steam or Discord ID require manual recovery.
+- Accounts without a Steam ID, Discord ID, or valid email address require
+  manual recovery.
 
-The importer must reject duplicate Steam or Discord IDs and any internal ID
-collision. Names, avatars, email addresses, and TruckersMP IDs must never be
-used on their own to claim an account.
+The importer must reject duplicate Steam IDs, Discord IDs, email addresses, and
+any internal ID collision. Names, avatars, and TruckersMP IDs must never be used
+on their own to claim an account. Email claim requires successful delivery and
+use of the destination Hub's time-limited password-reset link.
 
 ### Import order
 

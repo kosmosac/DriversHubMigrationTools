@@ -35,7 +35,13 @@ def create_import_plan(directory: Path) -> dict[str, object]:
 
     accounts: list[dict[str, object]] = []
     conflicts: list[dict[str, object]] = []
-    seen: dict[str, dict[int, int]] = {"uid": {}, "userid": {}, "steamid": {}, "discordid": {}}
+    seen: dict[str, dict[object, int]] = {
+        "uid": {},
+        "userid": {},
+        "steamid": {},
+        "discordid": {},
+        "email": {},
+    }
     for profile in profiles:
         if not isinstance(profile, dict):
             conflicts.append({"field": "profile", "error": "Profile is not an object"})
@@ -50,7 +56,15 @@ def create_import_plan(directory: Path) -> dict[str, object]:
         steamid = _identifier(profile.get("steamid"))
         discordid = _identifier(profile.get("discordid"))
         truckersmpid = _identifier(profile.get("truckersmpid"))
-        values = {"uid": uid, "userid": userid, "steamid": steamid, "discordid": discordid}
+        raw_email = profile.get("email")
+        email = raw_email.strip() if isinstance(raw_email, str) and "@" in raw_email else None
+        values = {
+            "uid": uid,
+            "userid": userid,
+            "steamid": steamid,
+            "discordid": discordid,
+            "email": email.lower() if email is not None else None,
+        }
         for field, value in values.items():
             if value is None or (field == "userid" and value < 0):
                 continue
@@ -66,6 +80,8 @@ def create_import_plan(directory: Path) -> dict[str, object]:
             claim_methods.append("steam")
         if discordid is not None:
             claim_methods.append("discord")
+        if email is not None:
+            claim_methods.append("email")
         accounts.append(
             {
                 "source_uid": uid,
@@ -77,7 +93,7 @@ def create_import_plan(directory: Path) -> dict[str, object]:
                 "steamid": steamid,
                 "discordid": discordid,
                 "truckersmpid": truckersmpid,
-                "email": "reconnect",
+                "email": email,
                 "password": "not-imported",
                 "mfa": "enroll-again",
                 "state": "claimable" if claim_methods else "manual-recovery-required",
@@ -88,7 +104,7 @@ def create_import_plan(directory: Path) -> dict[str, object]:
         "format_version": 1,
         "state": "blocked" if conflicts else "complete",
         "identity_policy": "preserve-source-ids",
-        "claim_policy": "steam-or-discord",
+        "claim_policy": "steam-discord-or-email",
         "accounts": sorted(accounts, key=lambda account: account["source_uid"]),
         "summary": {
             "accounts": len(accounts),

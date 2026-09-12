@@ -144,14 +144,16 @@ written:
 
 The command preserves each source `uid` and `userid` in its proposed target
 mapping. Imported Steam and Discord IDs let users claim their existing account
-by signing in again through the corresponding provider. Passwords, MFA secrets,
-and sessions are not imported. Users reconnect and verify email individually
-and must enroll in MFA again.
+by signing in again through the corresponding provider. An imported email
+address provides a third claim method through the normal password-reset flow
+when SMTP is configured. Passwords, MFA secrets, and sessions are not imported,
+and users must enroll in MFA again.
 
 The command writes `import-plan.json` and stops with a nonzero status when it
-finds duplicate internal IDs, Steam IDs, or Discord IDs. Accounts without a
-Steam or Discord ID are listed as requiring manual recovery. No destination is
-contacted or modified at this stage.
+finds duplicate internal IDs, Steam IDs, Discord IDs, or email addresses.
+Accounts without Steam, Discord, or a valid email address are listed as
+requiring manual recovery. No destination is contacted or modified at this
+stage.
 
 ## Development
 
