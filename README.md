@@ -79,8 +79,8 @@ access and currently exports:
 - announcements, applications, challenges, downloads, events, polls, and tasks;
 - division definitions and pending division validations.
 - deliveries as an unchanged CSV export and a normalized JSON representation.
-- Economy configuration and account balances; vehicle, garage, and merchandise
-  inventories are included with source-side effects enabled.
+- Economy configuration and account balances; vehicle, garage, merchandise,
+  transaction, and garage-slot data are included with source-side effects enabled.
 
 Accepted members, detailed profiles, role history, and ban history are
 available when `DRIVERSHUB_ALLOW_SOURCE_SIDE_EFFECTS=true` is set in `.env`.
@@ -94,9 +94,9 @@ explicit approval. Task content and pending division validations do not require
 this approval. Plugin content is exported only when the frontend configuration
 reports that the corresponding standard plugin is enabled.
 
-Economy transaction histories and individual garage slots are not exported
-yet. The report marks the Economy result as partial instead of implying full
-coverage.
+The upstream transaction endpoint reports inconsistent totals for some
+transaction types. The exporter therefore reads each account until an actual
+empty page and deduplicates the result by transaction ID.
 
 With the same approval, the exporter also collects the paginated delivery list
 and individual delivery details. The list updates administrator activity. Each

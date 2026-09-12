@@ -7,12 +7,12 @@ import csv
 from io import StringIO
 import json
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import quote, urlencode, urljoin
 
 from .assess import assess, normalize_api_url
 from .details import export_details
 from .http import HttpClient, RequestFailed
-from .pagination import export_paginated
+from .pagination import InvalidPage, export_paginated, validate_page
 from .storage import WorkJournal, atomic_write, sha256, write_json
 
 
@@ -268,6 +268,108 @@ def _export_economy_balances(
     }
 
 
+def _export_partitioned_pages(
+    *,
+    name: str,
+    source: str,
+    partitions: list[tuple[str, str, str | None]],
+    output: Path,
+    client: HttpClient,
+    journal: WorkJournal,
+    deduplicate_by: str,
+    partition_field: str | None = None,
+    page_size: int = 500,
+) -> dict[str, object]:
+    collected: dict[object, dict[str, object]] = {}
+    failures: list[dict[str, object]] = []
+    pages = 0
+    for partition, relative_url, partition_value in partitions:
+        page_number = 1
+        while True:
+            key = f"{name}/{partition}/page/{page_number}"
+            path = (
+                output
+                / "raw"
+                / name
+                / partition
+                / f"page-{page_number:06d}.json"
+            )
+            page = None
+            if journal.completed(key) and path.exists():
+                try:
+                    page = validate_page(json.loads(path.read_bytes()))
+                except (json.JSONDecodeError, UnicodeDecodeError, InvalidPage):
+                    page = None
+            url = urljoin(source, relative_url) + "?" + urlencode(
+                {"page": page_number, "page_size": page_size, "order_by": deduplicate_by, "order": "asc"}
+            )
+            if page is None:
+                try:
+                    response = client.get(url)
+                    page = validate_page(response.json())
+                except (RequestFailed, InvalidPage) as exc:
+                    response = exc.response if isinstance(exc, RequestFailed) else None
+                    failure = {
+                        "state": "failed",
+                        "partition": partition,
+                        "page": page_number,
+                        "url": url,
+                        "status": response.status if response else None,
+                        "error": str(exc),
+                    }
+                    journal.record(key, failure)
+                    failures.append(failure)
+                    break
+                atomic_write(path, response.body)
+                journal.record(
+                    key,
+                    {
+                        "state": "complete",
+                        "url": url,
+                        "status": response.status,
+                        "content_type": response.content_type,
+                        "path": str(path.relative_to(output)),
+                        "sha256": sha256(response.body),
+                        "items": len(page["list"]),
+                    },
+                )
+            pages += 1
+            for value in page["list"]:
+                if not isinstance(value, dict) or deduplicate_by not in value:
+                    failures.append(
+                        {
+                            "state": "invalid",
+                            "partition": partition,
+                            "page": page_number,
+                            "error": f"A record does not contain {deduplicate_by}",
+                        }
+                    )
+                    continue
+                record = dict(value)
+                if partition_field is not None:
+                    record[partition_field] = partition_value
+                collected.setdefault(record[deduplicate_by], record)
+            if len(page["list"]) < page_size:
+                break
+            page_number += 1
+
+    records = [collected[key] for key in sorted(collected)]
+    normalized_path = output / "normalized" / f"{name}.json"
+    write_json(
+        normalized_path,
+        {"format_version": 1, "resource": name, "records": records},
+    )
+    return {
+        "state": "complete" if not failures else "incomplete",
+        "partitions": len(partitions),
+        "pages": pages,
+        "items": len(records),
+        "path": str(normalized_path.relative_to(output)),
+        "sha256": sha256(normalized_path.read_bytes()),
+        "failures": failures,
+    }
+
+
 def _export_economy(
     *,
     source: str,
@@ -306,9 +408,71 @@ def _export_economy(
                 "reason": "Set DRIVERSHUB_ALLOW_SOURCE_SIDE_EFFECTS=true to permit this request.",
                 "source_side_effect": "Updates the requesting administrator's activity.",
             }
-    result["reason"] = (
-        "Transaction histories and individual garage slots are not exported yet."
-    )
+    if allow_source_side_effects:
+        balance_records = _normalized_records(output, "economy-balances")
+        userids = sorted(
+            {
+                record["userid"]
+                for record in balance_records
+                if isinstance(record, dict) and isinstance(record.get("userid"), int)
+            }
+        )
+        result["transactions"] = _export_partitioned_pages(
+            name="economy-transactions",
+            source=source,
+            partitions=[
+                (f"userid-{userid}", f"economy/balance/{userid}/transactions/list", None)
+                for userid in userids
+            ],
+            output=output,
+            client=client,
+            journal=journal,
+            deduplicate_by="txid",
+        )
+        result["transactions"]["source_side_effect"] = (
+            "Updates the requesting administrator's activity."
+        )
+        garage_records = _normalized_records(output, "economy-garages")
+        garageids = sorted(
+            {
+                str(record["garageid"])
+                for record in garage_records
+                if isinstance(record, dict) and record.get("garageid") is not None
+            }
+        )
+        result["garage_slots"] = _export_partitioned_pages(
+            name="economy-garage-slots",
+            source=source,
+            partitions=[
+                (
+                    f"garage-{index}",
+                    f"economy/garages/{quote(garageid, safe='')}/slots/list",
+                    garageid,
+                )
+                for index, garageid in enumerate(garageids, start=1)
+            ],
+            output=output,
+            client=client,
+            journal=journal,
+            deduplicate_by="slotid",
+            partition_field="garageid",
+            page_size=250,
+        )
+        result["garage_slots"]["source_side_effect"] = (
+            "Updates the requesting administrator's activity."
+        )
+        states = [
+            result[key]["state"]
+            for key in ("balances", "trucks", "garages", "merch", "transactions", "garage_slots")
+        ]
+        result["state"] = "complete" if all(state == "complete" for state in states) else "incomplete"
+    else:
+        for key in ("transactions", "garage_slots"):
+            result[key] = {
+                "state": "skipped",
+                "reason": "Set DRIVERSHUB_ALLOW_SOURCE_SIDE_EFFECTS=true to permit these requests.",
+                "source_side_effect": "Updates the requesting administrator's activity.",
+            }
     return result
 
 
