@@ -73,6 +73,11 @@ configuration access and downloads the three branding assets when they exist.
 Missing assets are recorded as unavailable and do not fail the export. The
 result is stored in `export.json` and `raw/branding/`.
 
+Enabled standard plugins are detected from the frontend configuration. The
+source API does not expose its complete external-plugin list. The report marks
+external-plugin detection as partial instead of treating undetected plugins as
+absent.
+
 ## Development
 
 Run the test suite with the Python standard library:

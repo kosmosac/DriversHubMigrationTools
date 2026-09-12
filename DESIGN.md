@@ -132,9 +132,10 @@ Before collection, the exporter must:
 
 - verify the Hub API URL and prefix;
 - identify the backend version;
-- identify enabled standard and external plugins;
-- distinguish supported external plugins from detected plugins for which no
-  migration adapter is available;
+- identify enabled standard plugins from the client configuration;
+- detect external plugins where their public routes provide reliable evidence;
+- report that external-plugin detection is incomplete because the source API
+  does not expose the configured external-plugin list;
 - verify the administrator identity and effective permissions;
 - probe the endpoints required by the selected export scope;
 - report which endpoints accept the dedicated application token and which need
@@ -146,10 +147,11 @@ Before collection, the exporter must:
 Preflight must not change the source configuration or content.
 
 An unknown, private, or otherwise unavailable external plugin must not prevent
-the export of the rest of the Hub. The report must record its name, whether it
-is enabled, and which related API routes or data sets could not be exported.
-The migration directory must preserve this information so that the limitation
-remains visible during import.
+the export of the rest of the Hub. When a plugin can be detected, the report
+must record its name and which related API routes or data sets could not be
+exported. The report must not interpret undetected plugins as absent. The
+migration directory must preserve this limitation so that it remains visible
+during import.
 
 ### Data collection order
 

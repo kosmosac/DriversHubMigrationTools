@@ -8,21 +8,27 @@ class CapabilityTests(unittest.TestCase):
         results = {
             "backend-config": {
                 "config": {
-                    "plugins": ["announcement"],
-                    "external_plugins": ["client-config", "private-plugin"],
+                    "plugins": [],
                 },
                 "backup": {},
                 "config_last_modified": 1,
                 "backup_last_modified": 1,
             },
-            "client-config": {"abbr": "example"},
+            "client-config": {
+                "abbr": "example",
+                "plugins": ["announcement"],
+            },
         }
         self.assertEqual(
             derive_capabilities(results),
             {
                 "administrative_config": True,
                 "standard_plugins": ["announcement"],
-                "external_plugins": ["client-config", "private-plugin"],
+                "external_plugins": {
+                    "state": "partial",
+                    "detected": ["client-config"],
+                    "reason": "The source API does not expose the complete external plugin list.",
+                },
                 "client_config": True,
             },
         )

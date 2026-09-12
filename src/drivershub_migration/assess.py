@@ -33,19 +33,19 @@ def derive_capabilities(results: dict[str, object]) -> dict[str, object]:
         "config_last_modified",
         "backup_last_modified",
     }.issubset(backend)
-    config = backend.get("config", {}) if administrative_config else {}
-    if not isinstance(config, dict):
-        config = {}
-    plugins = config.get("plugins", [])
-    external_plugins = config.get("external_plugins", [])
+    client = results.get("client-config")
+    client_config = isinstance(client, dict) and "error" not in client
+    plugins = client.get("plugins", []) if client_config else []
+    detected_external = ["client-config"] if client_config else []
     return {
         "administrative_config": administrative_config,
         "standard_plugins": plugins if isinstance(plugins, list) else [],
-        "external_plugins": (
-            external_plugins if isinstance(external_plugins, list) else []
-        ),
-        "client_config": isinstance(results.get("client-config"), dict)
-        and "error" not in results["client-config"],
+        "external_plugins": {
+            "state": "partial",
+            "detected": detected_external,
+            "reason": "The source API does not expose the complete external plugin list.",
+        },
+        "client_config": client_config,
     }
 
 
