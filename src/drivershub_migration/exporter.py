@@ -8,10 +8,16 @@ from urllib.parse import urljoin
 
 from .assess import assess, normalize_api_url
 from .http import HttpClient, RequestFailed
+from .pagination import export_paginated
 from .storage import WorkJournal, atomic_write, sha256, write_json
 
 
 ASSETS = ("logo", "banner", "bgimage")
+PAGINATED_RESOURCES = (
+    ("users", "user/list", {"order_by": "uid", "order": "asc"}),
+    ("members", "member/list", {"order_by": "userid", "order": "asc"}),
+    ("bans", "user/ban/list", {"order_by": "uid", "order": "asc"}),
+)
 
 
 def export_source(source: str, output: Path, token: str) -> dict[str, object]:
@@ -59,13 +65,33 @@ def export_source(source: str, output: Path, token: str) -> dict[str, object]:
             journal.record(key, value)
             assets[name] = value
 
+    resources: dict[str, object] = {}
+    for name, relative_url, query in PAGINATED_RESOURCES:
+        resources[name] = export_paginated(
+            name=name,
+            source=source,
+            relative_url=relative_url,
+            output=output,
+            client=client,
+            journal=journal,
+            query=query,
+        )
+
     report = {
         "format_version": 1,
         "source": source,
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "scope": ["backend_configuration", "frontend_configuration", "branding"],
+        "scope": [
+            "backend_configuration",
+            "frontend_configuration",
+            "branding",
+            "users",
+            "members",
+            "bans",
+        ],
         "capabilities": capabilities,
         "assets": assets,
+        "resources": resources,
     }
     write_json(output / "export.json", report)
     return report

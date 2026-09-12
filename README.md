@@ -6,9 +6,9 @@ administrator account. The destination is expected to be under the operator's
 control.
 
 The project is in an early implementation stage. It currently provides a
-read-only source assessment and an initial export of backend configuration,
-frontend configuration, and branding assets. Other source data and destination
-import are not yet available.
+read-only source assessment and an initial export of configuration, branding,
+users, members, and current bans. Other source data and destination import are
+not yet available.
 
 See [DESIGN.md](DESIGN.md) for the planned migration coverage, limitations, and
 implementation stages.
@@ -60,7 +60,7 @@ configuration file:
 The migration directory contains personal and operational data. Store it on a
 trusted system and retain its owner-only file permissions.
 
-## Export configuration and branding
+## Export supported source data
 
 After a successful assessment, run:
 
@@ -68,10 +68,19 @@ After a successful assessment, run:
 .venv/bin/drivershub-migrate export
 ```
 
-The command reuses completed assessment requests. It requires administrative
-configuration access and downloads the three branding assets when they exist.
-Missing assets are recorded as unavailable and do not fail the export. The
-result is stored in `export.json` and `raw/branding/`.
+The command reuses completed requests. It requires administrative configuration
+access and currently exports:
+
+- backend and frontend configuration;
+- logo, banner, and background image;
+- users who are not accepted as members;
+- accepted members;
+- current bans.
+
+Paginated responses are stored unchanged below `raw/`. Combined representations
+for later import are stored below `normalized/`. Missing branding assets do not
+fail the export. `export.json` records completeness, item counts, failures, and
+checksums.
 
 Enabled standard plugins are detected from the frontend configuration. The
 source API does not expose its complete external-plugin list. The report marks
