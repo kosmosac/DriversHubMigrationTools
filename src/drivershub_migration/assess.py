@@ -25,6 +25,30 @@ def normalize_api_url(value: str) -> str:
     return value.rstrip("/") + "/"
 
 
+def derive_capabilities(results: dict[str, object]) -> dict[str, object]:
+    backend = results.get("backend-config")
+    administrative_config = isinstance(backend, dict) and {
+        "config",
+        "backup",
+        "config_last_modified",
+        "backup_last_modified",
+    }.issubset(backend)
+    config = backend.get("config", {}) if administrative_config else {}
+    if not isinstance(config, dict):
+        config = {}
+    plugins = config.get("plugins", [])
+    external_plugins = config.get("external_plugins", [])
+    return {
+        "administrative_config": administrative_config,
+        "standard_plugins": plugins if isinstance(plugins, list) else [],
+        "external_plugins": (
+            external_plugins if isinstance(external_plugins, list) else []
+        ),
+        "client_config": isinstance(results.get("client-config"), dict)
+        and "error" not in results["client-config"],
+    }
+
+
 def assess(source: str, output: Path, token: str | None) -> dict[str, object]:
     source = normalize_api_url(source)
     authorization = f"Application {token}" if token else None
@@ -70,6 +94,7 @@ def assess(source: str, output: Path, token: str | None) -> dict[str, object]:
         "source": source,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "authentication": "application" if token else "none",
+        "capabilities": derive_capabilities(results),
         "results": results,
     }
     write_json(output / "assessment.json", report)

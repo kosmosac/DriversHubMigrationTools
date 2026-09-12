@@ -6,8 +6,9 @@ administrator account. The destination is expected to be under the operator's
 control.
 
 The project is in an early implementation stage. It currently provides a
-read-only source assessment. Data export and destination import are not yet
-available.
+read-only source assessment and an initial export of backend configuration,
+frontend configuration, and branding assets. Other source data and destination
+import are not yet available.
 
 See [DESIGN.md](DESIGN.md) for the planned migration coverage, limitations, and
 implementation stages.
@@ -34,7 +35,7 @@ identifies the migration and its creation date. Set the source URL, token, and
 migration directory in `.env`. Then run:
 
 ```bash
-drivershub-migrate assess
+.venv/bin/drivershub-migrate assess
 ```
 
 Delete the application token in the source Hub after the final assessment or
@@ -50,10 +51,27 @@ selected migration directory:
 Run the same command with the same directory after an interruption. Completed
 requests are reused. Use `--no-token` to inspect only public endpoints. Use
 `--env-file PATH` before the `assess` command to select a different
-configuration file.
+configuration file:
+
+```bash
+.venv/bin/drivershub-migrate --env-file PATH assess
+```
 
 The migration directory contains personal and operational data. Store it on a
 trusted system and retain its owner-only file permissions.
+
+## Export configuration and branding
+
+After a successful assessment, run:
+
+```bash
+.venv/bin/drivershub-migrate export
+```
+
+The command reuses completed assessment requests. It requires administrative
+configuration access and downloads the three branding assets when they exist.
+Missing assets are recorded as unavailable and do not fail the export. The
+result is stored in `export.json` and `raw/branding/`.
 
 ## Development
 

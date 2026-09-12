@@ -55,12 +55,14 @@ class HttpClient:
 
     def get(self, url: str, *, expect_json: bool = True) -> Response:
         last_error: Exception | None = None
+        last_response: Response | None = None
         for attempt in range(self.max_attempts):
             elapsed = time.monotonic() - self._last_request
             if elapsed < self.minimum_interval:
                 self.sleeper(self.minimum_interval - elapsed)
             try:
                 response = self._once(url)
+                last_response = response
                 if self._valid(response, expect_json):
                     return response
                 last_error = RequestFailed(
@@ -76,7 +78,10 @@ class HttpClient:
                 delay = self._backoff(attempt)
             if attempt + 1 < self.max_attempts:
                 self.sleeper(delay)
-        raise RequestFailed(f"Request failed after {self.max_attempts} attempts: {url}") from last_error
+        raise RequestFailed(
+            f"Request failed after {self.max_attempts} attempts: {url}",
+            last_response,
+        ) from last_error
 
     def _once(self, url: str) -> Response:
         headers = {"Accept": "application/json", "User-Agent": "DriversHubMigrationTools/0.1"}
