@@ -63,7 +63,7 @@ def parser() -> argparse.ArgumentParser:
         help="migration directory; overrides DRIVERSHUB_MIGRATION_DIRECTORY",
     )
     target_command = commands.add_parser(
-        "preflight-target", help="Inspect a Docker AIO destination without modifying it"
+        "preflight-target", help="Inspect a destination without modifying it"
     )
     target_command.add_argument(
         "--output",
@@ -115,15 +115,28 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "preflight-target":
         output_value = args.output or setting("DRIVERSHUB_MIGRATION_DIRECTORY")
+        target_mode = (setting("DRIVERSHUB_TARGET_MODE") or "aio").lower()
         target_value = args.target or setting("DRIVERSHUB_TARGET_DIRECTORY")
         if not output_value:
             raise SystemExit(
                 "Set DRIVERSHUB_MIGRATION_DIRECTORY in .env or use --output"
             )
-        if not target_value:
+        if target_mode == "aio" and not target_value:
             raise SystemExit("Set DRIVERSHUB_TARGET_DIRECTORY in .env or use --target")
         try:
-            report = preflight_target(Path(output_value), Path(target_value))
+            report = preflight_target(
+                Path(output_value),
+                Path(target_value) if target_value else None,
+                mode=target_mode,
+                database={
+                    "host": setting("DRIVERSHUB_TARGET_DB_HOST"),
+                    "port": setting("DRIVERSHUB_TARGET_DB_PORT"),
+                    "user": setting("DRIVERSHUB_TARGET_DB_USER"),
+                    "password": setting("DRIVERSHUB_TARGET_DB_PASSWORD"),
+                    "database": setting("DRIVERSHUB_TARGET_DB_NAME"),
+                    "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET"),
+                },
+            )
         except ValueError as exc:
             raise SystemExit(str(exc)) from exc
         print(json.dumps(report, indent=2, ensure_ascii=False))

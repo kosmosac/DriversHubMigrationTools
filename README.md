@@ -157,16 +157,24 @@ stage.
 
 ## Inspect the destination
 
-Set `DRIVERSHUB_TARGET_DIRECTORY` to an initialized Drivers Hub Docker AIO
-directory. Its MariaDB service must be running. Then inspect its existing user
-accounts without modifying them:
+The destination can be this project's preferred Drivers Hub Docker AIO
+deployment or any installation of the upstream HubBackend with an accessible
+MariaDB database.
+
+For Docker AIO, set `DRIVERSHUB_TARGET_MODE=aio` and
+`DRIVERSHUB_TARGET_DIRECTORY` to the initialized deployment directory. Its
+MariaDB service must be running. For another installation, set
+`DRIVERSHUB_TARGET_MODE=mariadb` and provide the `DRIVERSHUB_TARGET_DB_*`
+connection values in `.env`. Then inspect its existing user accounts without
+modifying them:
 
 ```bash
 .venv/bin/drivershub-migrate preflight-target
 ```
 
-The command reads the database through `docker compose exec` and writes
-`target-preflight.json`. It does not assume fixed IDs for the destination
+The AIO adapter reads MariaDB through `docker compose exec`. The generic adapter
+connects directly to MariaDB. Both write the same `target-preflight.json` and
+use the same migration rules. Neither assumes fixed IDs for the destination
 administrator. Every existing destination account is reported for an explicit
 preserve-or-merge decision. Source `uid` and `userid` values remain unchanged
 in either case.

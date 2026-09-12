@@ -34,6 +34,24 @@ class TargetPreflightTests(unittest.TestCase):
             self.assertEqual(result["collisions"][0]["fields"], ["userid"])
             self.assertTrue((migration / "target-preflight.json").is_file())
 
+    @patch("drivershub_migration.target._read_mariadb_accounts")
+    @patch("drivershub_migration.target.create_import_plan")
+    def test_supports_direct_mariadb_target(self, create_plan, read_accounts):
+        create_plan.return_value = {
+            "state": "complete",
+            "accounts": [{"target_uid": 1, "target_userid": 1}],
+        }
+        read_accounts.return_value = []
+        with TemporaryDirectory() as migration_temp:
+            result = preflight_target(
+                Path(migration_temp),
+                mode="mariadb",
+                database={"host": "db", "user": "hub", "database": "hub"},
+            )
+            self.assertEqual(result["state"], "complete")
+            self.assertEqual(result["target_mode"], "mariadb")
+            read_accounts.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
