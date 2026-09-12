@@ -133,6 +133,26 @@ files, and checksums:
 This command does not contact the source Hub. It exits with a nonzero status if
 the manifest is invalid, a referenced file is missing, or a checksum differs.
 
+## Plan destination identities
+
+Create the identity and account-claim plan before any destination data is
+written:
+
+```bash
+.venv/bin/drivershub-migrate plan-import
+```
+
+The command preserves each source `uid` and `userid` in its proposed target
+mapping. Imported Steam and Discord IDs let users claim their existing account
+by signing in again through the corresponding provider. Passwords, MFA secrets,
+and sessions are not imported. Users reconnect and verify email individually
+and must enroll in MFA again.
+
+The command writes `import-plan.json` and stops with a nonzero status when it
+finds duplicate internal IDs, Steam IDs, or Discord IDs. Accounts without a
+Steam or Discord ID are listed as requiring manual recovery. No destination is
+contacted or modified at this stage.
+
 ## Development
 
 Run the test suite with the Python standard library:

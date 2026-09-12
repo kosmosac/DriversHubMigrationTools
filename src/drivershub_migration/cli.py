@@ -10,6 +10,7 @@ from pathlib import Path
 from .assess import assess
 from .env import read_env
 from .exporter import export_source
+from .import_plan import create_import_plan
 from .verify import verify_export
 
 
@@ -52,6 +53,14 @@ def parser() -> argparse.ArgumentParser:
         type=Path,
         help="migration directory; overrides DRIVERSHUB_MIGRATION_DIRECTORY",
     )
+    plan_command = commands.add_parser(
+        "plan-import", help="Create a non-writing destination identity plan"
+    )
+    plan_command.add_argument(
+        "--output",
+        type=Path,
+        help="migration directory; overrides DRIVERSHUB_MIGRATION_DIRECTORY",
+    )
     return result
 
 
@@ -73,13 +82,20 @@ def main(argv: list[str] | None = None) -> int:
             return False
         raise SystemExit(f"{name} must be true or false")
 
-    if args.command == "verify":
+    if args.command in {"verify", "plan-import"}:
         output_value = args.output or setting("DRIVERSHUB_MIGRATION_DIRECTORY")
         if not output_value:
             raise SystemExit(
                 "Set DRIVERSHUB_MIGRATION_DIRECTORY in .env or use --output"
             )
-        report = verify_export(Path(output_value))
+        try:
+            report = (
+                verify_export(Path(output_value))
+                if args.command == "verify"
+                else create_import_plan(Path(output_value))
+            )
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
         print(json.dumps(report, indent=2, ensure_ascii=False))
         return 0 if report["state"] == "complete" else 1
 

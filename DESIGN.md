@@ -396,8 +396,9 @@ that a manually edited file or WebUI operation succeeded.
 ### Identity strategy
 
 The source `uid` is an internal account ID. The source `userid` is the visible
-member ID. A new empty destination can preserve many of these IDs through
-controlled database insertion, but preservation must never be assumed.
+member ID. A new empty destination preserves both values through controlled
+database insertion. Destination preflight must prove that this is possible
+before any rows are written.
 
 The emergency destination administrator and existing destination rows can
 cause conflicts. The importer must create explicit mappings for every source
@@ -407,9 +408,7 @@ Identity evidence should be evaluated in this order:
 
 1. Steam ID;
 2. Discord ID;
-3. TruckersMP ID;
-4. verified email address;
-5. manual operator decision.
+3. manual operator decision.
 
 Names and avatar URLs are not stable identities. The importer must stop on a
 conflict and must not combine accounts automatically.
@@ -417,19 +416,24 @@ conflict and must not combine accounts automatically.
 ### Imported user accounts
 
 Full destination access makes it possible to create account rows from exported
-profiles. These accounts must initially be treated as imported and unclaimed.
+profiles. Steam and Discord IDs are restored as claim identities. A successful
+new OAuth login through either provider selects the existing imported row and
+does not create a second account.
 
 - Password hashes cannot be restored.
 - MFA must be disabled until the user enrolls again.
 - OAuth access and refresh tokens cannot be restored.
 - Existing sessions cannot be restored.
-- Discord and Steam users can authenticate again through their external
-  identity when the destination integration is configured correctly.
-- Email users need a safe password-reset or account-claim process.
+- Discord and Steam users authenticate again through their external identity
+  when the destination integration is configured correctly.
+- Email is reconnected and verified after the claim; it is not a claim method.
+- TruckersMP IDs can be retained as account data, but they are not an
+  authentication method.
+- Accounts without a Steam or Discord ID require manual recovery.
 
-The design must be tested against all supported registration methods before an
-importer creates user rows. A separate account-claim workflow may be required
-to prevent account takeover and to handle changed external connections.
+The importer must reject duplicate Steam or Discord IDs and any internal ID
+collision. Names, avatars, email addresses, and TruckersMP IDs must never be
+used on their own to claim an account.
 
 ### Import order
 
