@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import csv
+from io import StringIO
 import json
 from pathlib import Path
 from urllib.parse import urljoin
@@ -35,6 +37,70 @@ PLUGIN_RESOURCES = (
     ("poll", "polls", "polls/list", "pollid", "polls/{id}", {"order_by": "pollid", "order": "asc"}, True),
     ("task", "tasks", "tasks/list", "taskid", "tasks?taskid={id}", {"order_by": "taskid", "order": "asc"}, False),
 )
+
+
+def _export_delivery_csv(
+    source: str,
+    output: Path,
+    client: HttpClient,
+    journal: WorkJournal,
+) -> dict[str, object]:
+    key = "deliveries/csv"
+    raw_path = output / "raw" / "deliveries" / "export.csv"
+    response = None
+    if not (journal.completed(key) and raw_path.exists()):
+        url = urljoin(source, "dlog/export") + "?include_ids=true"
+        try:
+            response = client.get(url, expect_json=False)
+            if response.content_type not in {"text/csv", "application/csv"}:
+                raise ValueError(
+                    f"The delivery export has content type {response.content_type or 'missing'}"
+                )
+            response.body.decode("utf-8")
+        except (RequestFailed, ValueError, UnicodeDecodeError) as exc:
+            failed_response = exc.response if isinstance(exc, RequestFailed) else response
+            failure = {
+                "state": "failed",
+                "url": url,
+                "status": failed_response.status if failed_response else None,
+                "error": str(exc),
+            }
+            journal.record(key, failure)
+            return failure
+        atomic_write(raw_path, response.body)
+        journal.record(
+            key,
+            {
+                "state": "complete",
+                "url": url,
+                "status": response.status,
+                "content_type": response.content_type,
+                "path": str(raw_path.relative_to(output)),
+                "sha256": sha256(response.body),
+            },
+        )
+
+    try:
+        text = raw_path.read_text(encoding="utf-8")
+        reader = csv.DictReader(StringIO(text))
+        records = list(reader)
+        if not reader.fieldnames:
+            raise ValueError("The delivery CSV does not contain a header")
+    except (OSError, UnicodeDecodeError, csv.Error, ValueError) as exc:
+        return {"state": "failed", "error": str(exc)}
+
+    normalized_path = output / "normalized" / "deliveries-csv.json"
+    write_json(
+        normalized_path,
+        {"format_version": 1, "resource": "deliveries-csv", "records": records},
+    )
+    entry = journal.entry(key)
+    return {
+        **entry,
+        "items": len(records),
+        "normalized_path": str(normalized_path.relative_to(output)),
+        "normalized_sha256": sha256(normalized_path.read_bytes()),
+    }
 
 
 def _export_profiles(
@@ -319,6 +385,53 @@ def export_source(
         allow_source_side_effects=allow_source_side_effects,
     )
 
+    deliveries: dict[str, object] = {
+        "csv": _export_delivery_csv(source, output, client, journal),
+    }
+    if allow_source_side_effects:
+        deliveries["list"] = export_paginated(
+            name="deliveries",
+            source=source,
+            relative_url="dlog/list",
+            output=output,
+            client=client,
+            journal=journal,
+            query={"order_by": "logid", "order": "asc"},
+        )
+        if deliveries["list"]["state"] == "complete":
+            deliveries["details"] = export_details(
+                name="deliveries",
+                id_key="logid",
+                records=_normalized_records(output, "deliveries"),
+                url_for=lambda identifier: urljoin(source, f"dlog/{identifier}"),
+                output=output,
+                client=client,
+                journal=journal,
+            )
+            deliveries["details"]["source_side_effect"] = (
+                "Increments the view counter of every requested delivery and updates "
+                "the requesting administrator's activity."
+            )
+        else:
+            deliveries["details"] = {
+                "state": "skipped",
+                "reason": "The delivery list export is incomplete.",
+            }
+        deliveries["list"]["source_side_effect"] = (
+            "Updates the requesting administrator's activity."
+        )
+    else:
+        deliveries["list"] = {
+            "state": "skipped",
+            "reason": "Set DRIVERSHUB_ALLOW_SOURCE_SIDE_EFFECTS=true to permit this request.",
+            "source_side_effect": "Updates the requesting administrator's activity.",
+        }
+        deliveries["details"] = {
+            "state": "skipped",
+            "reason": "Set DRIVERSHUB_ALLOW_SOURCE_SIDE_EFFECTS=true to permit these requests.",
+            "source_side_effect": "Increments the view counter of every requested delivery.",
+        }
+
     report = {
         "format_version": 1,
         "source": source,
@@ -331,11 +444,13 @@ def export_source(
             "members",
             "bans",
             "profiles",
+            "deliveries",
         ],
         "capabilities": capabilities,
         "assets": assets,
         "resources": resources,
         "plugin_resources": plugin_resources,
+        "deliveries": deliveries,
     }
     write_json(output / "export.json", report)
     return report

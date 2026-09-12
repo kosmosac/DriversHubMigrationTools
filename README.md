@@ -78,6 +78,7 @@ access and currently exports:
 - current bans.
 - announcements, applications, challenges, downloads, events, polls, and tasks;
 - division definitions and pending division validations.
+- deliveries as an unchanged CSV export and a normalized JSON representation.
 
 Accepted members, detailed profiles, role history, and ban history are
 available when `DRIVERSHUB_ALLOW_SOURCE_SIDE_EFFECTS=true` is set in `.env`.
@@ -90,6 +91,11 @@ update administrator activity. Their list and detail exports use the same
 explicit approval. Task content and pending division validations do not require
 this approval. Plugin content is exported only when the frontend configuration
 reports that the corresponding standard plugin is enabled.
+
+With the same approval, the exporter also collects the paginated delivery list
+and individual delivery details. The list updates administrator activity. Each
+detail request also increments that delivery's view counter. The safe default
+therefore exports the CSV data without requesting these JSON views.
 
 `DRIVERSHUB_REQUEST_INTERVAL` controls the minimum delay between requests. Keep
 the default value of `0.6` seconds unless the source operator documents a
