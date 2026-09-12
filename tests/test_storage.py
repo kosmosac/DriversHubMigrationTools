@@ -24,6 +24,10 @@ class StorageTests(unittest.TestCase):
             journal.record("assessment/status", {"state": "complete"})
             self.assertTrue(WorkJournal(path).completed("assessment/status"))
             self.assertEqual(
+                WorkJournal(path).entry("assessment/status"),
+                {"state": "complete"},
+            )
+            self.assertEqual(
                 json.loads((path / "work-journal.json").read_text())["format_version"],
                 1,
             )

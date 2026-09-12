@@ -53,6 +53,10 @@ class WorkJournal:
     def completed(self, key: str) -> bool:
         return self.data["requests"].get(key, {}).get("state") == "complete"
 
+    def entry(self, key: str) -> dict[str, Any] | None:
+        value = self.data["requests"].get(key)
+        return dict(value) if value is not None else None
+
     def record(self, key: str, value: dict[str, Any]) -> None:
         self.data["requests"][key] = value
         self.save()

@@ -35,7 +35,7 @@ def export_source(source: str, output: Path, token: str) -> dict[str, object]:
             key = f"branding/{name}"
             path = asset_directory / f"{name}.png"
             if journal.completed(key) and path.exists():
-                assets[name] = {"state": "complete", "path": str(path.relative_to(output))}
+                assets[name] = journal.entry(key)
                 continue
             url = urljoin(source, f"client/assets/{name}")
             try:
