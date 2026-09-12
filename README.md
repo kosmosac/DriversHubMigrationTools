@@ -76,12 +76,20 @@ access and currently exports:
 - users who are not accepted as members;
 - accepted members;
 - current bans.
+- announcements, applications, challenges, downloads, events, polls, and tasks;
+- division definitions and pending division validations.
 
 Accepted members, detailed profiles, role history, and ban history are
 available when `DRIVERSHUB_ALLOW_SOURCE_SIDE_EFFECTS=true` is set in `.env`.
 The relevant list and profile requests update the requesting administrator's
 activity in the source Hub. They therefore require explicit approval and are
 disabled by default.
+
+Announcements, applications, challenges, downloads, events, and polls also
+update administrator activity. Their list and detail exports use the same
+explicit approval. Task content and pending division validations do not require
+this approval. Plugin content is exported only when the frontend configuration
+reports that the corresponding standard plugin is enabled.
 
 `DRIVERSHUB_REQUEST_INTERVAL` controls the minimum delay between requests. Keep
 the default value of `0.6` seconds unless the source operator documents a

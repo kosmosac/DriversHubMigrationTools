@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.parse import urljoin
 
 from .assess import assess, normalize_api_url
+from .details import export_details
 from .http import HttpClient, RequestFailed
 from .pagination import export_paginated
 from .storage import WorkJournal, atomic_write, sha256, write_json
@@ -23,6 +24,16 @@ PAGINATED_RESOURCES = (
         "Updates the requesting administrator's activity.",
     ),
     ("bans", "user/ban/list", {"order_by": "uid", "order": "asc"}, None),
+)
+
+PLUGIN_RESOURCES = (
+    ("announcement", "announcements", "announcements/list", "announcementid", None, {"order_by": "announcementid", "order": "asc"}, True),
+    ("application", "applications", "applications/list", "applicationid", "applications/{id}", {"order_by": "applicationid", "order": "asc", "all_user": "true"}, True),
+    ("challenge", "challenges", "challenges/list", "challengeid", "challenges/{id}", {"order_by": "challengeid", "order": "asc"}, True),
+    ("downloads", "downloads", "downloads/list", "downloadsid", None, {"order_by": "downloadsid", "order": "asc"}, True),
+    ("event", "events", "events/list", "eventid", "events/{id}", {"order_by": "eventid", "order": "asc"}, True),
+    ("poll", "polls", "polls/list", "pollid", "polls/{id}", {"order_by": "pollid", "order": "asc"}, True),
+    ("task", "tasks", "tasks/list", "taskid", "tasks?taskid={id}", {"order_by": "taskid", "order": "asc"}, False),
 )
 
 
@@ -105,6 +116,103 @@ def _export_profiles(
         "failures": failures,
         "source_side_effect": "Updates the requesting administrator's activity.",
     }
+
+
+def _normalized_records(output: Path, name: str) -> list[object]:
+    path = output / "normalized" / f"{name}.json"
+    if not path.exists():
+        return []
+    value = json.loads(path.read_text(encoding="utf-8"))
+    records = value.get("records", []) if isinstance(value, dict) else []
+    return records if isinstance(records, list) else []
+
+
+def _export_plugins(
+    *,
+    source: str,
+    output: Path,
+    client: HttpClient,
+    journal: WorkJournal,
+    enabled_plugins: list[str],
+    allow_source_side_effects: bool,
+) -> dict[str, object]:
+    results: dict[str, object] = {}
+    for plugin, name, list_url, id_key, detail_url, query, has_side_effect in PLUGIN_RESOURCES:
+        if plugin not in enabled_plugins:
+            results[plugin] = {"state": "disabled"}
+            continue
+        if has_side_effect and not allow_source_side_effects:
+            results[plugin] = {
+                "state": "skipped",
+                "reason": "Set DRIVERSHUB_ALLOW_SOURCE_SIDE_EFFECTS=true to permit these requests.",
+                "source_side_effect": "Updates the requesting administrator's activity.",
+            }
+            continue
+        listing = export_paginated(
+            name=name,
+            source=source,
+            relative_url=list_url,
+            output=output,
+            client=client,
+            journal=journal,
+            query=query,
+        )
+        plugin_result: dict[str, object] = {"list": listing}
+        if listing["state"] == "complete" and detail_url is not None:
+            records = _normalized_records(output, name)
+            details = export_details(
+                name=name,
+                id_key=id_key,
+                records=records,
+                url_for=lambda identifier, template=detail_url: urljoin(
+                    source, template.format(id=identifier)
+                ),
+                output=output,
+                client=client,
+                journal=journal,
+            )
+            plugin_result["details"] = details
+            plugin_result["state"] = details["state"]
+        elif listing["state"] == "complete":
+            plugin_result["details"] = {
+                "state": "not-required",
+                "reason": "The administrative list response contains the relevant object data.",
+            }
+            plugin_result["state"] = "complete"
+        else:
+            plugin_result["state"] = "incomplete"
+        if has_side_effect:
+            plugin_result["source_side_effect"] = (
+                "Updates the requesting administrator's activity."
+            )
+        results[plugin] = plugin_result
+
+    if "division" in enabled_plugins:
+        results["division"] = {
+            "state": "complete",
+            "definitions": "Included in the administrative backend configuration.",
+            "pending": export_paginated(
+                name="division-pending",
+                source=source,
+                relative_url="divisions/list/pending",
+                output=output,
+                client=client,
+                journal=journal,
+                query={"order_by": "logid", "order": "asc"},
+            ),
+        }
+    else:
+        results["division"] = {"state": "disabled"}
+
+    for plugin in ("banner", "route"):
+        if plugin in enabled_plugins:
+            results[plugin] = {
+                "state": "configuration-only",
+                "reason": "No independent content collection is exposed by this plugin.",
+            }
+        else:
+            results[plugin] = {"state": "disabled"}
+    return results
 
 
 def export_source(
@@ -202,6 +310,15 @@ def export_source(
             "source_side_effect": "Updates the requesting administrator's activity.",
         }
 
+    plugin_resources = _export_plugins(
+        source=source,
+        output=output,
+        client=client,
+        journal=journal,
+        enabled_plugins=capabilities["standard_plugins"],
+        allow_source_side_effects=allow_source_side_effects,
+    )
+
     report = {
         "format_version": 1,
         "source": source,
@@ -218,6 +335,7 @@ def export_source(
         "capabilities": capabilities,
         "assets": assets,
         "resources": resources,
+        "plugin_resources": plugin_resources,
     }
     write_json(output / "export.json", report)
     return report
