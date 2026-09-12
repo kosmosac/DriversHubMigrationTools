@@ -49,10 +49,16 @@ def derive_capabilities(results: dict[str, object]) -> dict[str, object]:
     }
 
 
-def assess(source: str, output: Path, token: str | None) -> dict[str, object]:
+def assess(
+    source: str,
+    output: Path,
+    token: str | None,
+    *,
+    request_interval: float = 0.6,
+) -> dict[str, object]:
     source = normalize_api_url(source)
     authorization = f"Application {token}" if token else None
-    client = HttpClient(authorization)
+    client = HttpClient(authorization, minimum_interval=request_interval)
     journal = WorkJournal(output)
     raw_directory = output / "raw" / "assessment"
     results: dict[str, object] = {}

@@ -77,6 +77,15 @@ access and currently exports:
 - accepted members;
 - current bans.
 
+Detailed profiles, role history, and ban history are available when
+`DRIVERSHUB_ALLOW_SOURCE_SIDE_EFFECTS=true` is set in `.env`. Profile requests
+update the requesting administrator's activity in the source Hub. The export
+therefore requires explicit approval and is disabled by default.
+
+`DRIVERSHUB_REQUEST_INTERVAL` controls the minimum delay between requests. Keep
+the default value of `0.6` seconds unless the source operator documents a
+different safe request rate.
+
 Paginated responses are stored unchanged below `raw/`. Combined representations
 for later import are stored below `normalized/`. Missing branding assets do not
 fail the export. `export.json` records completeness, item counts, failures, and

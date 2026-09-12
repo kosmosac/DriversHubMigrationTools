@@ -53,6 +53,17 @@ def main(argv: list[str] | None = None) -> int:
     def setting(name: str) -> str | None:
         return os.environ.get(name, file_values.get(name))
 
+    def boolean_setting(name: str, default: bool = False) -> bool:
+        value = setting(name)
+        if value is None:
+            return default
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+        raise SystemExit(f"{name} must be true or false")
+
     if args.command in {"assess", "export"}:
         source = args.source or setting("DRIVERSHUB_SOURCE_URL")
         output_value = args.output or setting("DRIVERSHUB_MIGRATION_DIRECTORY")
@@ -68,10 +79,29 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(
                 "Set DRIVERSHUB_APPLICATION_TOKEN in .env or use --no-token"
             )
+        try:
+            request_interval = float(setting("DRIVERSHUB_REQUEST_INTERVAL") or "0.6")
+        except ValueError as exc:
+            raise SystemExit("DRIVERSHUB_REQUEST_INTERVAL must be a number") from exc
+        if request_interval < 0:
+            raise SystemExit("DRIVERSHUB_REQUEST_INTERVAL must not be negative")
         if args.command == "assess":
-            report = assess(source, Path(output_value), token)
+            report = assess(
+                source,
+                Path(output_value),
+                token,
+                request_interval=request_interval,
+            )
         else:
-            report = export_source(source, Path(output_value), token)
+            report = export_source(
+                source,
+                Path(output_value),
+                token,
+                request_interval=request_interval,
+                allow_source_side_effects=boolean_setting(
+                    "DRIVERSHUB_ALLOW_SOURCE_SIDE_EFFECTS"
+                ),
+            )
         print(json.dumps(report, indent=2, ensure_ascii=False))
         return 0
     return 2
