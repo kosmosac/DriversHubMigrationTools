@@ -55,7 +55,7 @@ def assess(
     output: Path,
     token: str | None,
     *,
-    request_interval: float = 0.6,
+    request_interval: float = 1.1,
     progress: Callable[[str], None] | None = None,
 ) -> dict[str, object]:
     source = normalize_api_url(source)

@@ -43,7 +43,7 @@ class HttpClient:
         *,
         timeout: float = 30,
         minimum_interval: float = 0.25,
-        max_attempts: int = 5,
+        max_attempts: int = 8,
         sleeper: Callable[[float], None] = time.sleep,
         progress: Callable[[str], None] | None = None,
     ) -> None:
@@ -79,9 +79,17 @@ class HttpClient:
                 )
                 if response.status in {400, 401, 404, 405, 422}:
                     raise last_error
+                if self.progress:
+                    retry_after = response.headers.get("retry-after")
+                    detail = f"HTTP {response.status}"
+                    if retry_after:
+                        detail += f", Retry-After: {retry_after} seconds"
+                    self.progress(f"Retry required: {detail}")
                 delay = self._delay(response, attempt)
             except (TimeoutError, ConnectionError, urllib.error.URLError) as exc:
                 last_error = exc
+                if self.progress:
+                    self.progress(f"Retry required: {type(exc).__name__}: {exc}")
                 delay = self._backoff(attempt)
             if attempt + 1 < self.max_attempts:
                 if self.progress:
@@ -122,7 +130,11 @@ class HttpClient:
         retry_after = response.headers.get("retry-after")
         if retry_after:
             try:
-                return max(float(retry_after), self.minimum_interval)
+                return max(
+                    float(retry_after),
+                    self.minimum_interval,
+                    self._backoff(attempt),
+                )
             except ValueError:
                 pass
         return self._backoff(attempt)

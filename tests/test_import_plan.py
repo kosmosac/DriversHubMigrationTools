@@ -17,7 +17,7 @@ class ImportPlanTests(unittest.TestCase):
 
     @patch("drivershub_migration.import_plan.verify_export")
     def test_creates_claim_plan_and_allows_repeated_pending_userid(self, verify):
-        verify.return_value = {"state": "complete"}
+        verify.return_value = {"integrity": "valid"}
         with TemporaryDirectory() as temporary:
             directory = Path(temporary)
             self._write_profiles(
@@ -39,7 +39,7 @@ class ImportPlanTests(unittest.TestCase):
 
     @patch("drivershub_migration.import_plan.verify_export")
     def test_blocks_duplicate_claim_identity(self, verify):
-        verify.return_value = {"state": "complete"}
+        verify.return_value = {"integrity": "valid"}
         with TemporaryDirectory() as temporary:
             directory = Path(temporary)
             self._write_profiles(
@@ -55,7 +55,7 @@ class ImportPlanTests(unittest.TestCase):
 
     @patch("drivershub_migration.import_plan.verify_export")
     def test_blocks_duplicate_email_case_insensitively(self, verify):
-        verify.return_value = {"state": "complete"}
+        verify.return_value = {"integrity": "valid"}
         with TemporaryDirectory() as temporary:
             directory = Path(temporary)
             self._write_profiles(

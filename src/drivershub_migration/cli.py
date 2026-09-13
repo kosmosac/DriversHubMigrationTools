@@ -115,6 +115,8 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError as exc:
             raise SystemExit(str(exc)) from exc
         print(json.dumps(report, indent=2, ensure_ascii=False))
+        if args.command == "verify":
+            return 0 if report["integrity"] == "valid" else 1
         return 0 if report["state"] == "complete" else 1
 
     if args.command == "preflight-target":
@@ -162,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:
                 "Set DRIVERSHUB_APPLICATION_TOKEN in .env or use --no-token"
             )
         try:
-            request_interval = float(setting("DRIVERSHUB_REQUEST_INTERVAL") or "0.6")
+            request_interval = float(setting("DRIVERSHUB_REQUEST_INTERVAL") or "1.1")
         except ValueError as exc:
             raise SystemExit("DRIVERSHUB_REQUEST_INTERVAL must be a number") from exc
         if request_interval < 0:

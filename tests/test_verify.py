@@ -24,11 +24,13 @@ class VerifyTests(unittest.TestCase):
                     }
                 )
             )
-            self.assertEqual(verify_export(directory)["state"], "complete")
+            result = verify_export(directory)
+            self.assertEqual(result["integrity"], "valid")
+            self.assertEqual(result["manifest_states"], {})
 
             (directory / "data.json").write_bytes(b"changed")
             result = verify_export(directory)
-            self.assertEqual(result["state"], "failed")
+            self.assertEqual(result["integrity"], "invalid")
             self.assertEqual(result["failures"][0]["error"], "Checksum mismatch")
 
     def test_rejects_path_outside_directory(self):
@@ -43,8 +45,26 @@ class VerifyTests(unittest.TestCase):
                 )
             )
             result = verify_export(directory)
-            self.assertEqual(result["state"], "failed")
+            self.assertEqual(result["integrity"], "invalid")
             self.assertEqual(result["failures"][0]["error"], "Path leaves migration directory")
+
+    def test_reports_manifest_states_separately_from_integrity(self):
+        with TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            (directory / "export.json").write_text(
+                json.dumps(
+                    {
+                        "format_version": 1,
+                        "resource": {"state": "complete"},
+                        "optional": {"state": "skipped"},
+                    }
+                )
+            )
+            result = verify_export(directory)
+            self.assertEqual(result["integrity"], "valid")
+            self.assertEqual(
+                result["manifest_states"], {"complete": 1, "skipped": 1}
+            )
 
 
 if __name__ == "__main__":

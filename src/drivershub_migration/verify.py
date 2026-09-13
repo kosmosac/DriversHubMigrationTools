@@ -23,6 +23,18 @@ def _file_references(value: object, location: str = "export"):
             yield from _file_references(child, f"{location}[{index}]")
 
 
+def _manifest_states(value: object, counts: dict[str, int]) -> None:
+    if isinstance(value, dict):
+        state = value.get("state")
+        if isinstance(state, str):
+            counts[state] = counts.get(state, 0) + 1
+        for child in value.values():
+            _manifest_states(child, counts)
+    elif isinstance(value, list):
+        for child in value:
+            _manifest_states(child, counts)
+
+
 def verify_export(directory: Path) -> dict[str, object]:
     manifest_path = directory / "export.json"
     failures: list[dict[str, object]] = []
@@ -30,9 +42,10 @@ def verify_export(directory: Path) -> dict[str, object]:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         return {
-            "state": "failed",
+            "integrity": "invalid",
             "directory": str(directory),
             "checked_files": 0,
+            "manifest_states": {},
             "failures": [{"path": "export.json", "error": str(exc)}],
         }
     if not isinstance(manifest, dict) or manifest.get("format_version") != 1:
@@ -69,9 +82,12 @@ def verify_export(directory: Path) -> dict[str, object]:
                 }
             )
 
+    manifest_states: dict[str, int] = {}
+    _manifest_states(manifest, manifest_states)
     return {
-        "state": "complete" if not failures else "failed",
+        "integrity": "valid" if not failures else "invalid",
         "directory": str(directory),
         "checked_files": len(checked),
+        "manifest_states": dict(sorted(manifest_states.items())),
         "failures": failures,
     }

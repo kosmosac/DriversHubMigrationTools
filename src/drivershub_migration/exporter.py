@@ -570,7 +570,7 @@ def export_source(
     output: Path,
     token: str,
     *,
-    request_interval: float = 0.6,
+    request_interval: float = 1.1,
     allow_source_side_effects: bool = False,
     allow_delivery_view_updates: bool = False,
     progress: Callable[[str], None] | None = None,

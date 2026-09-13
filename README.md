@@ -108,9 +108,10 @@ increments that delivery's view counter. The safe default therefore exports the
 CSV and, when activity updates are allowed, the JSON list without requesting
 these detail views.
 
-`DRIVERSHUB_REQUEST_INTERVAL` controls the minimum delay between requests. Keep
-the default value of `0.6` seconds unless the source operator documents a
-different safe request rate.
+`DRIVERSHUB_REQUEST_INTERVAL` controls the minimum delay between requests. The
+default value of `1.1` seconds stays below the limit of 60 requests per minute
+used by some source endpoints. Use a different value only when the source
+operator documents a safe request rate.
 
 Paginated responses are stored unchanged below `raw/`. Combined representations
 for later import are stored below `normalized/`. Missing branding assets do not
@@ -136,8 +137,11 @@ files, and checksums:
 .venv/bin/drivershub-migrate verify
 ```
 
-This command does not contact the source Hub. It exits with a nonzero status if
-the manifest is invalid, a referenced file is missing, or a checksum differs.
+This command does not contact the source Hub. `integrity` reports whether the
+manifest and all referenced files are valid. `manifest_states` separately
+summarizes complete, skipped, partial, and other export entries. The command
+exits with a nonzero status if the manifest is invalid, a referenced file is
+missing, or a checksum differs.
 
 ## Plan destination identities
 
