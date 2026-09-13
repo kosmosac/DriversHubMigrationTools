@@ -571,6 +571,7 @@ def export_source(
     *,
     request_interval: float = 0.6,
     allow_source_side_effects: bool = False,
+    allow_delivery_view_updates: bool = False,
 ) -> dict[str, object]:
     source = normalize_api_url(source)
     assessment = assess(
@@ -691,7 +692,10 @@ def export_source(
             journal=journal,
             query={"order_by": "logid", "order": "asc"},
         )
-        if deliveries["list"]["state"] == "complete":
+        if (
+            deliveries["list"]["state"] == "complete"
+            and allow_delivery_view_updates
+        ):
             deliveries["details"] = export_details(
                 name="deliveries",
                 id_key="logid",
@@ -705,10 +709,21 @@ def export_source(
                 "Increments the view counter of every requested delivery and updates "
                 "the requesting administrator's activity."
             )
-        else:
+        elif deliveries["list"]["state"] != "complete":
             deliveries["details"] = {
                 "state": "skipped",
                 "reason": "The delivery list export is incomplete.",
+            }
+        else:
+            deliveries["details"] = {
+                "state": "skipped",
+                "reason": (
+                    "Set DRIVERSHUB_ALLOW_DELIVERY_VIEW_UPDATES=true to permit "
+                    "delivery detail requests."
+                ),
+                "source_side_effect": (
+                    "Increments the view counter of every requested delivery."
+                ),
             }
         deliveries["list"]["source_side_effect"] = (
             "Updates the requesting administrator's activity."

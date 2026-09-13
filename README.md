@@ -97,10 +97,12 @@ The upstream transaction endpoint reports inconsistent totals for some
 transaction types. The exporter therefore reads each account until an actual
 empty page and deduplicates the result by transaction ID.
 
-With the same approval, the exporter also collects the paginated delivery list
-and individual delivery details. The list updates administrator activity. Each
-detail request also increments that delivery's view counter. The safe default
-therefore exports the CSV data without requesting these JSON views.
+With the same approval, the exporter also collects the paginated delivery list.
+Individual delivery details require the separate
+`DRIVERSHUB_ALLOW_DELIVERY_VIEW_UPDATES=true` setting because each request
+increments that delivery's view counter. The safe default therefore exports the
+CSV and, when activity updates are allowed, the JSON list without requesting
+these detail views.
 
 `DRIVERSHUB_REQUEST_INTERVAL` controls the minimum delay between requests. Keep
 the default value of `0.6` seconds unless the source operator documents a

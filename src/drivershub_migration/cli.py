@@ -179,6 +179,9 @@ def main(argv: list[str] | None = None) -> int:
                 allow_source_side_effects=boolean_setting(
                     "DRIVERSHUB_ALLOW_SOURCE_SIDE_EFFECTS"
                 ),
+                allow_delivery_view_updates=boolean_setting(
+                    "DRIVERSHUB_ALLOW_DELIVERY_VIEW_UPDATES"
+                ),
             )
         print(json.dumps(report, indent=2, ensure_ascii=False))
         return 0
