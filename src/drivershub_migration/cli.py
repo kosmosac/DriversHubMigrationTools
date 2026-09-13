@@ -116,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(str(exc)) from exc
         print(json.dumps(report, indent=2, ensure_ascii=False))
         if args.command == "verify":
-            return 0 if report["integrity"] == "valid" else 1
+            return 0 if report["integrity"] == "valid" and report["export"] == "complete" else 1
         return 0 if report["state"] == "complete" else 1
 
     if args.command == "preflight-target":

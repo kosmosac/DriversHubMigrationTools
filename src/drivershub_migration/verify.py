@@ -43,6 +43,7 @@ def verify_export(directory: Path) -> dict[str, object]:
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         return {
             "integrity": "invalid",
+            "export": "unknown",
             "directory": str(directory),
             "checked_files": 0,
             "manifest_states": {},
@@ -84,10 +85,17 @@ def verify_export(directory: Path) -> dict[str, object]:
 
     manifest_states: dict[str, int] = {}
     _manifest_states(manifest, manifest_states)
+    incomplete_states = {
+        state: manifest_states[state]
+        for state in ("failed", "incomplete", "inconsistent")
+        if manifest_states.get(state, 0) > 0
+    }
     return {
         "integrity": "valid" if not failures else "invalid",
+        "export": "incomplete" if incomplete_states else "complete",
         "directory": str(directory),
         "checked_files": len(checked),
         "manifest_states": dict(sorted(manifest_states.items())),
+        "export_issues": incomplete_states,
         "failures": failures,
     }

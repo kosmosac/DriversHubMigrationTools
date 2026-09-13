@@ -138,10 +138,10 @@ files, and checksums:
 ```
 
 This command does not contact the source Hub. `integrity` reports whether the
-manifest and all referenced files are valid. `manifest_states` separately
-summarizes complete, skipped, partial, and other export entries. The command
-exits with a nonzero status if the manifest is invalid, a referenced file is
-missing, or a checksum differs.
+manifest and all referenced files are valid. `export` reports whether any
+export entries are failed, incomplete, or inconsistent. `manifest_states`
+summarizes all recorded states. The command exits with a nonzero status when
+the integrity is invalid or the export is incomplete.
 
 ## Plan destination identities
 

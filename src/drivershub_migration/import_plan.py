@@ -21,7 +21,7 @@ def _identifier(value: object) -> int | None:
 
 def create_import_plan(directory: Path) -> dict[str, object]:
     verification = verify_export(directory)
-    if verification["integrity"] != "valid":
+    if verification["integrity"] != "valid" or verification["export"] != "complete":
         raise ValueError("The migration directory did not pass verification")
 
     profiles_path = directory / "normalized" / "profiles.json"
