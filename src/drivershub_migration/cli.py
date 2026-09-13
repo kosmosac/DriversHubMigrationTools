@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import sys
 
 from .assess import assess
 from .env import read_env
@@ -96,6 +97,9 @@ def main(argv: list[str] | None = None) -> int:
             return False
         raise SystemExit(f"{name} must be true or false")
 
+    def progress(message: str) -> None:
+        print(f"[drivershub-migrate] {message}", file=sys.stderr, flush=True)
+
     if args.command in {"verify", "plan-import"}:
         output_value = args.output or setting("DRIVERSHUB_MIGRATION_DIRECTORY")
         if not output_value:
@@ -169,6 +173,7 @@ def main(argv: list[str] | None = None) -> int:
                 Path(output_value),
                 token,
                 request_interval=request_interval,
+                progress=progress,
             )
         else:
             report = export_source(
@@ -182,6 +187,7 @@ def main(argv: list[str] | None = None) -> int:
                 allow_delivery_view_updates=boolean_setting(
                     "DRIVERSHUB_ALLOW_DELIVERY_VIEW_UPDATES"
                 ),
+                progress=progress,
             )
         print(json.dumps(report, indent=2, ensure_ascii=False))
         return 0

@@ -7,6 +7,7 @@ import csv
 from io import StringIO
 import json
 from pathlib import Path
+from typing import Callable
 from urllib.parse import quote, urlencode, urljoin
 
 from .assess import assess, normalize_api_url
@@ -572,6 +573,7 @@ def export_source(
     request_interval: float = 0.6,
     allow_source_side_effects: bool = False,
     allow_delivery_view_updates: bool = False,
+    progress: Callable[[str], None] | None = None,
 ) -> dict[str, object]:
     source = normalize_api_url(source)
     assessment = assess(
@@ -579,6 +581,7 @@ def export_source(
         output,
         token,
         request_interval=request_interval,
+        progress=progress,
     )
     capabilities = assessment["capabilities"]
     if not capabilities["administrative_config"]:
@@ -590,6 +593,7 @@ def export_source(
     client = HttpClient(
         f"Application {token}",
         minimum_interval=request_interval,
+        progress=progress,
     )
     assets: dict[str, object] = {}
     asset_directory = output / "raw" / "branding"

@@ -4,7 +4,7 @@ import urllib.error
 from email.message import Message
 from unittest.mock import patch
 
-from drivershub_migration.http import HttpClient, RequestFailed
+from drivershub_migration.http import HttpClient, RequestFailed, Response
 
 
 class Result:
@@ -26,6 +26,15 @@ class Result:
 
 
 class HttpClientTests(unittest.TestCase):
+    def test_reports_request_progress(self):
+        messages = []
+        client = HttpClient(None, progress=messages.append)
+        response = Response(200, {"content-type": "application/json"}, b"{}")
+        with patch.object(client, "_once", return_value=response):
+            client.get("https://example.test/api/status")
+        self.assertEqual(messages[0], "GET https://example.test/api/status")
+        self.assertEqual(messages[-1], "HTTP 200 complete")
+
     def test_accepts_json_response(self):
         with patch("urllib.request.urlopen", return_value=Result()):
             response = HttpClient(None, minimum_interval=0).get(

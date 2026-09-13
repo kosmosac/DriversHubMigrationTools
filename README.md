@@ -67,6 +67,10 @@ After a successful assessment, run:
 .venv/bin/drivershub-migrate export
 ```
 
+The command writes request progress and retries to the terminal while it runs.
+Its final JSON report remains separate on standard output and can still be
+redirected to another file.
+
 The command reuses completed requests. It requires administrative configuration
 access and currently exports:
 

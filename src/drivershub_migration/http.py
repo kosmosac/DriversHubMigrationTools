@@ -45,12 +45,14 @@ class HttpClient:
         minimum_interval: float = 0.25,
         max_attempts: int = 5,
         sleeper: Callable[[float], None] = time.sleep,
+        progress: Callable[[str], None] | None = None,
     ) -> None:
         self.authorization = authorization
         self.timeout = timeout
         self.minimum_interval = minimum_interval
         self.max_attempts = max_attempts
         self.sleeper = sleeper
+        self.progress = progress
         self._last_request = 0.0
 
     def get(self, url: str, *, expect_json: bool = True) -> Response:
@@ -61,9 +63,14 @@ class HttpClient:
             if elapsed < self.minimum_interval:
                 self.sleeper(self.minimum_interval - elapsed)
             try:
+                if self.progress:
+                    suffix = f" (attempt {attempt + 1}/{self.max_attempts})" if attempt else ""
+                    self.progress(f"GET {url}{suffix}")
                 response = self._once(url)
                 last_response = response
                 if self._valid(response, expect_json):
+                    if self.progress:
+                        self.progress(f"HTTP {response.status} complete")
                     return response
                 last_error = RequestFailed(
                     f"Unexpected response from {url}: HTTP {response.status}, "
@@ -77,6 +84,8 @@ class HttpClient:
                 last_error = exc
                 delay = self._backoff(attempt)
             if attempt + 1 < self.max_attempts:
+                if self.progress:
+                    self.progress(f"Retrying in {delay:.1f} seconds")
                 self.sleeper(delay)
         raise RequestFailed(
             f"Request failed after {self.max_attempts} attempts: {url}",

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 from urllib.parse import urljoin
 
 from .http import HttpClient, RequestFailed
@@ -55,14 +56,18 @@ def assess(
     token: str | None,
     *,
     request_interval: float = 0.6,
+    progress: Callable[[str], None] | None = None,
 ) -> dict[str, object]:
     source = normalize_api_url(source)
     authorization = f"Application {token}" if token else None
     authenticated_client = HttpClient(
         authorization,
         minimum_interval=request_interval,
+        progress=progress,
     )
-    public_client = HttpClient(None, minimum_interval=request_interval)
+    public_client = HttpClient(
+        None, minimum_interval=request_interval, progress=progress
+    )
     journal = WorkJournal(output)
     raw_directory = output / "raw" / "assessment"
     results: dict[str, object] = {}
