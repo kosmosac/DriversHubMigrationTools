@@ -36,11 +36,13 @@ def export_paginated(
     journal: WorkJournal,
     page_size: int = 250,
     query: dict[str, str] | None = None,
+    allow_growth: bool = False,
 ) -> dict[str, Any]:
     raw_directory = output / "raw" / name
     pages: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
     expected_pages: int | None = None
+    expected_items: int | None = None
     page_number = 1
 
     while expected_pages is None or page_number <= expected_pages:
@@ -91,16 +93,34 @@ def export_paginated(
         if expected_pages is None:
             expected_pages = page["total_pages"]
         elif page["total_pages"] != expected_pages:
-            failures.append(
-                {
-                    "page": page_number,
-                    "state": "inconsistent",
-                    "error": "total_pages changed during export",
-                    "expected": expected_pages,
-                    "observed": page["total_pages"],
-                }
-            )
-            expected_pages = max(expected_pages, page["total_pages"])
+            if allow_growth and page["total_pages"] > expected_pages:
+                expected_pages = page["total_pages"]
+            else:
+                failures.append(
+                    {
+                        "page": page_number,
+                        "state": "inconsistent",
+                        "error": "total_pages changed during export",
+                        "expected": expected_pages,
+                        "observed": page["total_pages"],
+                    }
+                )
+                expected_pages = max(expected_pages, page["total_pages"])
+        if expected_items is None:
+            expected_items = page["total_items"]
+        elif page["total_items"] != expected_items:
+            if allow_growth and page["total_items"] > expected_items:
+                expected_items = page["total_items"]
+            else:
+                failures.append(
+                    {
+                        "page": page_number,
+                        "state": "inconsistent",
+                        "error": "total_items changed during export",
+                        "expected": expected_items,
+                        "observed": page["total_items"],
+                    }
+                )
         pages.append(page)
         page_number += 1
 
@@ -112,7 +132,6 @@ def export_paginated(
         "records": records,
     }
     write_json(record_path, normalized)
-    expected_items = pages[0]["total_items"] if pages else None
     state = "complete"
     pages_required = max(1, expected_pages) if expected_pages is not None else None
     if failures or pages_required is None or len(pages) != pages_required:

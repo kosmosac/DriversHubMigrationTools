@@ -118,6 +118,11 @@ for later import are stored below `normalized/`. Missing branding assets do not
 fail the export. `export.json` records completeness, item counts, failures, and
 checksums.
 
+The delivery list uses ascending delivery IDs. If new deliveries appear while a
+long export is running, the exporter follows the increased page count and uses
+the latest reported item total. Decreasing totals and missing pages remain
+errors.
+
 Enabled standard plugins are detected from the frontend configuration. The
 source API does not expose its complete external-plugin list. The report marks
 external-plugin detection as partial instead of treating undetected plugins as

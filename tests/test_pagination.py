@@ -68,6 +68,29 @@ class PaginationTests(unittest.TestCase):
             self.assertEqual(resumed["items"], 2)
             self.assertEqual(resumed_client.urls, [])
 
+    def test_accepts_monotonic_growth_when_enabled(self):
+        bodies = [
+            b'{"list":[{"logid":1}],"total_items":2,"total_pages":2}',
+            b'{"list":[{"logid":2}],"total_items":3,"total_pages":3}',
+            b'{"list":[{"logid":3}],"total_items":3,"total_pages":3}',
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            result = export_paginated(
+                name="deliveries",
+                source="https://example.test/api/",
+                relative_url="dlog/list",
+                output=Path(directory),
+                client=Client(bodies),
+                journal=WorkJournal(Path(directory)),
+                page_size=1,
+                allow_growth=True,
+            )
+            self.assertEqual(result["state"], "complete")
+            self.assertEqual(result["pages"], 3)
+            self.assertEqual(result["items"], 3)
+            self.assertEqual(result["expected_items"], 3)
+            self.assertEqual(result["failures"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

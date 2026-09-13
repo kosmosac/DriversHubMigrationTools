@@ -695,6 +695,7 @@ def export_source(
             client=client,
             journal=journal,
             query={"order_by": "logid", "order": "asc"},
+            allow_growth=True,
         )
         if (
             deliveries["list"]["state"] == "complete"
