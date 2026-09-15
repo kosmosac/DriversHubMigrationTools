@@ -12,6 +12,13 @@ from .assess import assess
 from .env import read_env
 from .exporter import export_source
 from .import_plan import create_import_plan
+from .output import (
+    render_assessment,
+    render_export,
+    render_import_plan,
+    render_target_preflight,
+    render_verification,
+)
 from .target import preflight_target
 from .verify import verify_export
 
@@ -23,6 +30,11 @@ def parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path(".env"),
         help="configuration file (default: .env)",
+    )
+    result.add_argument(
+        "--json",
+        action="store_true",
+        help="write the complete machine-readable report to standard output",
     )
     commands = result.add_subparsers(dest="command", required=True)
     def common(command: argparse.ArgumentParser) -> None:
@@ -114,7 +126,15 @@ def main(argv: list[str] | None = None) -> int:
             )
         except ValueError as exc:
             raise SystemExit(str(exc)) from exc
-        print(json.dumps(report, indent=2, ensure_ascii=False))
+        print(
+            json.dumps(report, indent=2, ensure_ascii=False)
+            if args.json
+            else (
+                render_verification(report)
+                if args.command == "verify"
+                else render_import_plan(report, Path(output_value))
+            )
+        )
         if args.command == "verify":
             return 0 if report["integrity"] == "valid" and report["export"] == "complete" else 1
         return 0 if report["state"] == "complete" else 1
@@ -145,7 +165,11 @@ def main(argv: list[str] | None = None) -> int:
             )
         except ValueError as exc:
             raise SystemExit(str(exc)) from exc
-        print(json.dumps(report, indent=2, ensure_ascii=False))
+        print(
+            json.dumps(report, indent=2, ensure_ascii=False)
+            if args.json
+            else render_target_preflight(report)
+        )
         return 0 if report["state"] in {"complete", "action-required"} else 1
 
     if args.command in {"assess", "export"}:
@@ -191,7 +215,15 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 progress=progress,
             )
-        print(json.dumps(report, indent=2, ensure_ascii=False))
+        print(
+            json.dumps(report, indent=2, ensure_ascii=False)
+            if args.json
+            else (
+                render_assessment(report, Path(output_value))
+                if args.command == "assess"
+                else render_export(report, Path(output_value))
+            )
+        )
         return 0
     return 2
 

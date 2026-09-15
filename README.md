@@ -27,6 +27,15 @@ cp .env.example .env
 chmod 600 .env
 ```
 
+Commands print short status information and the next recommended action. Their
+complete reports are stored in the migration directory. Add the global
+`--json` option before the command when machine-readable standard output is
+required:
+
+```bash
+.venv/bin/drivershub-migrate --json verify
+```
+
 ## Assess a source Hub
 
 Create a dedicated application token in the source Hub. Give it a name that
