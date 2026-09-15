@@ -15,7 +15,6 @@ from .application_writer import import_applications
 from .configuration_writer import import_configuration
 from .content_writer import import_content
 from .delivery_writer import import_deliveries
-from .delivery_placeholder_writer import repair_delivery_placeholders
 from .user_state_writer import import_user_state
 from .env import read_env
 from .event_challenge_writer import import_events_challenges
@@ -191,15 +190,6 @@ def parser() -> argparse.ArgumentParser:
     final_command.add_argument("--output", type=Path)
     final_command.add_argument("--target", type=Path)
     final_command.add_argument("--writers-stopped", action="store_true")
-    repair_command = commands.add_parser(
-        "repair-delivery-placeholders",
-        help="Replace empty migration delivery details with renderable placeholders",
-    )
-    repair_command.add_argument("--output", type=Path)
-    repair_command.add_argument("--target", type=Path)
-    repair_command.add_argument("--approve", action="store_true")
-    repair_command.add_argument("--backup-confirmed", action="store_true")
-    repair_command.add_argument("--writers-stopped", action="store_true")
     polls_tasks_command = commands.add_parser(
         "import-polls-tasks", help="Import exported polls, votes, and tasks"
     )
@@ -299,7 +289,6 @@ def main(argv: list[str] | None = None) -> int:
         "import-deliveries",
         "import-relationships",
         "verify-target",
-        "repair-delivery-placeholders",
         "import-polls-tasks",
         "import-economy-inventory",
         "backfill-delivery-details",
@@ -472,14 +461,6 @@ def main(argv: list[str] | None = None) -> int:
                     database={"host": setting("DRIVERSHUB_TARGET_DB_HOST"), "port": setting("DRIVERSHUB_TARGET_DB_PORT"), "user": setting("DRIVERSHUB_TARGET_DB_USER"), "password": setting("DRIVERSHUB_TARGET_DB_PASSWORD"), "database": setting("DRIVERSHUB_TARGET_DB_NAME"), "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET")},
                     writers_stopped=args.writers_stopped,
                 )
-            elif args.command == "repair-delivery-placeholders":
-                report = repair_delivery_placeholders(
-                    Path(output_value), Path(target_value) if target_value else None,
-                    mode=target_mode,
-                    database={"host": setting("DRIVERSHUB_TARGET_DB_HOST"), "port": setting("DRIVERSHUB_TARGET_DB_PORT"), "user": setting("DRIVERSHUB_TARGET_DB_USER"), "password": setting("DRIVERSHUB_TARGET_DB_PASSWORD"), "database": setting("DRIVERSHUB_TARGET_DB_NAME"), "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET")},
-                    approved=args.approve, backup_confirmed=args.backup_confirmed,
-                    writers_stopped=args.writers_stopped,
-                )
             elif args.command in {"import-polls-tasks", "import-economy-inventory"}:
                 function = import_polls_tasks if args.command == "import-polls-tasks" else import_economy_inventory
                 report = function(
@@ -521,6 +502,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Ambiguous local timestamps skipped: {report.get('ambiguous_local_timestamps', 0)}")
             print(f"Failed windows: {report.get('failed_windows', 0)}")
             print(f"Transactions still using baseline metadata: {report.get('remaining_transactions', 0)}")
+            print(f"Transactions marked unavailable: {report.get('unavailable_transactions', 0)}")
             if report.get("state") == "incomplete":
                 print("Next: run the same command again to resume.")
             elif report.get("state") == "complete-with-gaps":
@@ -607,11 +589,6 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             print("Do not restart destination writer services; inspect target-verification.json.")
             return 1
-        if args.command == "repair-delivery-placeholders":
-            print("Delivery placeholder repair complete.")
-            print(f"Eligible migration placeholders: {report.get('eligible_placeholders', 0)}")
-            print("Next: run verify-target again before restarting destination writers.")
-            return 0
         if args.command == "import-polls-tasks":
             print("Poll and task import complete.")
             print(f"Polls: {report.get('polls', 0)}")

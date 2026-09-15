@@ -584,7 +584,10 @@ the tool must not replay tracker webhooks or trigger operational side effects.
 The source detail endpoint increments that delivery's view counter. The
 backfill therefore requires the same explicit operator consent as bulk detail
 export. If the source becomes permanently unavailable, the baseline delivery
-history remains usable with its clearly marked placeholder details.
+history remains usable with its clearly marked placeholder details. A
+definitive missing source delivery is marked
+`migration-import/detail-unavailable`; transient failures retain the pending
+marker and remain retryable.
 
 ### Deferred economy transaction enrichment
 
@@ -604,7 +607,9 @@ the exact migration placeholder. Missing or ambiguous records remain usable
 with their baseline values. Enrichment is never required before the
 destination Hub can be started. The source API still does not expose the
 original internal transaction note, so successfully matched rows retain the
-recognizable `migration-import/csv-enriched` marker.
+recognizable `migration-import/internal-note-unavailable` value. Once every
+applicable source window has been checked, wholly unmatched rows are changed
+from pending to `migration-import/enrichment-unavailable`.
 
 Exact reconstruction still depends on the source fields that were available.
 Missing driver payloads, deleted deliveries, private data, and derived

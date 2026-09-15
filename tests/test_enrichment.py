@@ -92,8 +92,9 @@ class EnrichmentTests(unittest.TestCase):
             (normalized / "deliveries.json").write_text(json.dumps({"records": [{"timestamp": 1711843200}]}))
             (directory / "export.json").write_text(json.dumps({"created_at": "2024-04-02T00:00:00+00:00"}))
             sql = []
+            pending = iter([[['1']], [['0']]])
             with (
-                patch("drivershub_migration.enrichment.query_rows", return_value=[["0"]]),
+                patch("drivershub_migration.enrichment.query_rows", side_effect=lambda *a, **k: next(pending)),
                 patch("drivershub_migration.enrichment.execute_live", side_effect=lambda value, *a, **k: sql.append(value)),
                 patch("drivershub_migration.enrichment.HttpClient", CsvClient),
             ):

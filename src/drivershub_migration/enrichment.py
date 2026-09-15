@@ -8,6 +8,7 @@ from io import StringIO
 import json
 from pathlib import Path
 import subprocess
+import time
 from typing import Callable
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -20,7 +21,41 @@ from .storage import WorkJournal, atomic_write, sha256, write_json
 
 
 ECONOMY_MARKER = "migration-import/pending-enrichment"
-ECONOMY_ENRICHED_MARKER = "migration-import/csv-enriched"
+ECONOMY_ENRICHED_MARKER = "migration-import/internal-note-unavailable"
+ECONOMY_UNAVAILABLE_MARKER = "migration-import/enrichment-unavailable"
+DELIVERY_UNAVAILABLE_MARKER = "migration-import/detail-unavailable"
+
+
+def _duration(seconds: float) -> str:
+    value = max(0, int(seconds))
+    hours, value = divmod(value, 3600)
+    minutes, seconds = divmod(value, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
+class _Progress:
+    def __init__(self, total: int, callback: Callable[[str], None] | None, initial_seconds: float) -> None:
+        self.total = total
+        self.callback = callback
+        self.initial_seconds = initial_seconds
+        self.started = time.monotonic()
+        self.processed = 0
+
+    def show(self) -> None:
+        if not self.callback:
+            return
+        elapsed = time.monotonic() - self.started
+        average = elapsed / self.processed if self.processed else self.initial_seconds
+        eta = average * max(0, self.total - self.processed)
+        percent = 100.0 if self.total == 0 else self.processed * 100.0 / self.total
+        self.callback(
+            f"Progress {self.processed}/{self.total} ({percent:.1f}%); "
+            f"elapsed {_duration(elapsed)}; ETA {_duration(eta)}"
+        )
+
+    def advance(self) -> None:
+        self.processed += 1
+        self.show()
 
 
 def _import_complete(directory: Path, stage: str) -> None:
@@ -56,6 +91,12 @@ def backfill_delivery_details(
     if progress:
         suffix = f" (limited to {limit} requests)" if limit is not None else ""
         progress(f"Delivery backfill found {len(rows)} marked placeholders{suffix}")
+    progress_state = _Progress(
+        min(len(rows), limit) if limit is not None else len(rows),
+        progress,
+        max(request_interval, 0.1),
+    )
+    progress_state.show()
     completed = failed = unavailable = skipped = attempted = 0
     for fields in rows:
         if limit is not None and attempted >= limit:
@@ -114,9 +155,19 @@ def backfill_delivery_details(
         except (RequestFailed, ValueError, IndexError) as exc:
             response = exc.response if isinstance(exc, RequestFailed) else None
             state = "unavailable" if response is not None and response.status == 404 else "failed"
+            if state == "unavailable":
+                expected = placeholder_detail(delivered=delivered == 1, ats=unit == 2)
+                execute_live(
+                    "UPDATE dlog d JOIN dlog_meta m ON m.logid=d.logid "
+                    f"SET m.note={_sql_value(DELIVERY_UNAVAILABLE_MARKER)} "
+                    f"WHERE d.logid={logid} AND m.note={_sql_value(DETAIL_MARKER)} "
+                    f"AND d.data={_sql_value(expected)};\n",
+                    target_directory, mode=mode, database=database, runner=runner,
+                )
             journal.record(key, {"state": state, "logid": logid, "attempts": attempts, "url": url, "error": str(exc)})
             unavailable += state == "unavailable"
             failed += state == "failed"
+        progress_state.advance()
     remaining = int(query_rows(
         f"SELECT COUNT(*) FROM dlog_meta WHERE note={_sql_value(DETAIL_MARKER)};",
         target_directory, mode=mode, database=database, runner=runner,
@@ -177,6 +228,20 @@ def enrich_economy_transactions(
         zone = ZoneInfo(source_timezone)
     except ZoneInfoNotFoundError as exc:
         raise ValueError("DRIVERSHUB_SOURCE_TIMEZONE is not a valid IANA time zone") from exc
+    initial_pending = int(query_rows(
+        f"SELECT COUNT(*) FROM economy_transaction WHERE note={_sql_value(ECONOMY_MARKER)};",
+        target_directory, mode=mode, database=database, runner=runner,
+    )[0][0])
+    if initial_pending == 0:
+        report = {
+            "state": "complete", "attempted_windows": 0,
+            "completed_windows": 0, "completed_windows_total": 0,
+            "total_windows": 0, "failed_windows": 0,
+            "source_rows_processed": 0, "ambiguous_local_timestamps": 0,
+            "remaining_transactions": 0, "unavailable_transactions": 0,
+        }
+        write_json(directory / "enrichment" / "economy-enrichment.json", report)
+        return report
     balance_data = json.loads((directory / "normalized" / "economy-balances.json").read_text(encoding="utf-8"))
     userids = sorted({int(row["userid"]) for row in balance_data.get("records", []) if isinstance(row, dict) and isinstance(row.get("userid"), int)})
     start, end = _source_bounds(directory)
@@ -189,11 +254,18 @@ def enrich_economy_transactions(
         cursor = before + 1
     journal = WorkJournal(directory / "enrichment" / "economy")
     client = HttpClient(token, minimum_interval=20.5, progress=progress)
+    pending_windows = [
+        window for window in windows
+        if not journal.completed(f"economy/{window[0]}/{window[1]}-{window[2]}")
+    ]
+    planned = min(len(pending_windows), limit) if limit is not None else len(pending_windows)
     if progress:
-        planned = min(len(windows), limit) if limit is not None else len(windows)
         progress(
-            f"Economy enrichment has {len(windows)} source windows; this run will process at most {planned}"
+            f"Economy enrichment has {len(pending_windows)} remaining source windows; this run will process at most {planned}"
         )
+        progress(f"Transactions awaiting enrichment: {initial_pending}")
+    progress_state = _Progress(planned, progress, 20.5)
+    progress_state.show()
     attempted = completed_windows = failed = updated = ambiguous = 0
     for userid, after, before in windows:
         if limit is not None and attempted >= limit:
@@ -237,6 +309,13 @@ def enrich_economy_transactions(
         except (RequestFailed, ValueError, KeyError, UnicodeDecodeError) as exc:
             journal.record(key, {"state": "failed", "userid": userid, "after": after, "before": before, "attempts": attempts, "url": url, "error": str(exc)})
             failed += 1
+        progress_state.advance()
+        if progress:
+            current_pending = int(query_rows(
+                f"SELECT COUNT(*) FROM economy_transaction WHERE note={_sql_value(ECONOMY_MARKER)};",
+                target_directory, mode=mode, database=database, runner=runner,
+            )[0][0])
+            progress(f"Transactions awaiting enrichment: {current_pending}")
     remaining = int(query_rows(
         f"SELECT COUNT(*) FROM economy_transaction WHERE note={_sql_value(ECONOMY_MARKER)};",
         target_directory, mode=mode, database=database, runner=runner,
@@ -249,8 +328,22 @@ def enrich_economy_transactions(
         state = "complete"
     elif completed_total == len(windows):
         state = "complete-with-gaps"
+        left_to_mark = remaining
+        while left_to_mark:
+            execute_live(
+                "UPDATE economy_transaction "
+                f"SET note={_sql_value(ECONOMY_UNAVAILABLE_MARKER)} "
+                f"WHERE note={_sql_value(ECONOMY_MARKER)} ORDER BY txid LIMIT 500;\n",
+                target_directory, mode=mode, database=database, runner=runner,
+            )
+            left_to_mark = int(query_rows(
+                f"SELECT COUNT(*) FROM economy_transaction WHERE note={_sql_value(ECONOMY_MARKER)};",
+                target_directory, mode=mode, database=database, runner=runner,
+            )[0][0])
     else:
         state = "incomplete"
+    unavailable = remaining if state == "complete-with-gaps" else 0
+    pending = 0 if state == "complete-with-gaps" else remaining
     report = {
         "state": state,
         "attempted_windows": attempted,
@@ -260,7 +353,8 @@ def enrich_economy_transactions(
         "failed_windows": failed,
         "source_rows_processed": updated,
         "ambiguous_local_timestamps": ambiguous,
-        "remaining_transactions": remaining,
+        "remaining_transactions": pending,
+        "unavailable_transactions": unavailable,
     }
     write_json(directory / "enrichment" / "economy-enrichment.json", report)
     return report

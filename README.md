@@ -435,17 +435,6 @@ The detail payload contains a recognizable, frontend-renderable placeholder and
 keeps delivery pages usable while allowing optional detail backfill to identify
 and safely replace placeholders later.
 
-Baseline imports created with an older version of this tool may contain empty
-detail payloads. With the destination writers stopped, replace only those
-marked migration placeholders and verify the destination again:
-
-```bash
-.venv/bin/drivershub-migrate repair-delivery-placeholders \
-  --approve \
-  --backup-confirmed
-.venv/bin/drivershub-migrate verify-target
-```
-
 ## Import dependent relationships
 
 After deliveries exist, restore their exported relationships:
@@ -489,7 +478,8 @@ The destination may remain online while the following jobs run. Both jobs are
 resumable: progress and source responses are stored below `enrichment/` in the
 migration directory, completed work is skipped, and destination rows are
 updated only while they still carry the exact migration marker. `--limit N`
-can restrict a run to `N` source requests.
+can restrict a run to `N` source requests. During a run, the commands show
+completed work, percentage, elapsed time, and an estimated remaining time.
 
 Delivery details and telemetry can be restored individually:
 
@@ -500,7 +490,9 @@ Delivery details and telemetry can be restored individually:
 This requires `DRIVERSHUB_ALLOW_DELIVERY_VIEW_UPDATES=true`, because every
 detail request increments the corresponding delivery's view counter on the
 source Hub. A deleted or temporarily unavailable source delivery remains
-usable with its migration placeholder and can be retried later.
+usable with its migration placeholder. A definitive `404` is marked
+`migration-import/detail-unavailable`; transient failures remain pending and
+can be retried later.
 
 Economy transaction timestamps can be restored from the source CSV exports:
 
@@ -516,8 +508,10 @@ unchanged because the CSV cannot identify a unique instant.
 The source endpoint allows only three requests per minute, so this job waits at
 least 20.5 seconds between requests and can take a long time. It also requires
 many requests for a Hub with numerous accounts and a long history. The source
-API does not expose the original internal transaction note; enriched rows
-therefore remain explicitly marked as `migration-import/csv-enriched`.
+API does not expose the original internal transaction note. Successfully
+matched rows receive `migration-import/internal-note-unavailable`; after every
+source window has been checked, wholly unmatched rows are marked
+`migration-import/enrichment-unavailable` instead of remaining pending.
 
 Then verify login and account claiming, configuration and branding, recent
 deliveries, applications, events, challenges, and economy balances in the Web
