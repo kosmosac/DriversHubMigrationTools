@@ -292,6 +292,22 @@ file atomically and updates frontend configuration and assets in one database
 transaction. Do not restart the Hub until all remaining import stages have
 completed.
 
+## Import user state
+
+With the destination writer services still stopped, import durable state that
+belongs to the imported accounts:
+
+```bash
+.venv/bin/drivershub-migrate import-user-state \
+  --approve \
+  --backup-confirmed
+```
+
+This imports global user notes, active bans, ban history, and role history.
+Personal administrator notes cannot be attributed safely because the source
+API does not identify their author; the command reports and skips them.
+Sessions, MFA enrolments, and transient activity records are not imported.
+
 ## Development
 
 Run the test suite with the Python standard library:

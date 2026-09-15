@@ -11,6 +11,7 @@ import sys
 from .assess import assess
 from .account_writer import import_accounts
 from .configuration_writer import import_configuration
+from .user_state_writer import import_user_state
 from .env import read_env
 from .exporter import export_source
 from .dry_run import create_import_dry_run
@@ -118,6 +119,14 @@ def parser() -> argparse.ArgumentParser:
     configuration_command.add_argument("--approve", action="store_true")
     configuration_command.add_argument("--backup-confirmed", action="store_true")
     configuration_command.add_argument("--writers-stopped", action="store_true")
+    user_state_command = commands.add_parser(
+        "import-user-state", help="Import notes, bans, and role history"
+    )
+    user_state_command.add_argument("--output", type=Path)
+    user_state_command.add_argument("--target", type=Path)
+    user_state_command.add_argument("--approve", action="store_true")
+    user_state_command.add_argument("--backup-confirmed", action="store_true")
+    user_state_command.add_argument("--writers-stopped", action="store_true")
     dry_run_command.add_argument(
         "--target",
         type=Path,
@@ -179,6 +188,7 @@ def main(argv: list[str] | None = None) -> int:
         "dry-run-import",
         "import-accounts",
         "import-configuration",
+        "import-user-state",
     }:
         output_value = args.output or setting("DRIVERSHUB_MIGRATION_DIRECTORY")
         target_mode = (setting("DRIVERSHUB_TARGET_MODE") or "aio").lower()
@@ -229,6 +239,23 @@ def main(argv: list[str] | None = None) -> int:
                     backup_confirmed=args.backup_confirmed,
                     writers_stopped=args.writers_stopped,
                 )
+            elif args.command == "import-user-state":
+                report = import_user_state(
+                    Path(output_value),
+                    Path(target_value) if target_value else None,
+                    mode=target_mode,
+                    database={
+                        "host": setting("DRIVERSHUB_TARGET_DB_HOST"),
+                        "port": setting("DRIVERSHUB_TARGET_DB_PORT"),
+                        "user": setting("DRIVERSHUB_TARGET_DB_USER"),
+                        "password": setting("DRIVERSHUB_TARGET_DB_PASSWORD"),
+                        "database": setting("DRIVERSHUB_TARGET_DB_NAME"),
+                        "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET"),
+                    },
+                    approved=args.approve,
+                    backup_confirmed=args.backup_confirmed,
+                    writers_stopped=args.writers_stopped,
+                )
             else:
                 function = preflight_target if args.command == "preflight-target" else create_import_dry_run
                 report = function(
@@ -258,6 +285,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Portable backend values: {report.get('portable_backend_values', 0)}")
             print(f"Branding assets: {report.get('branding_assets', 0)}")
             print("Destination infrastructure and integration settings retained: yes")
+            print("Next: keep destination writer services stopped for the remaining import stages.")
+            return 0
+        if args.command == "import-user-state":
+            print("User-state import complete.")
+            print(f"Global notes: {report.get('global_notes', 0)}")
+            print(f"Role-history records: {report.get('role_history_records', 0)}")
+            print(f"Active bans: {report.get('active_bans', 0)}")
+            print(f"Ban-history records: {report.get('ban_history_records', 0)}")
+            print(f"Personal administrator notes skipped: {report.get('personal_notes_skipped', 0)}")
             print("Next: keep destination writer services stopped for the remaining import stages.")
             return 0
         print(
