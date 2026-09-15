@@ -94,6 +94,41 @@ class AccountImportTests(unittest.TestCase):
         self.assertEqual(summary["merged_accounts"], 1)
         self.assertEqual(summary["preserved_passwords"], 1)
 
+    def test_merges_multiple_matching_destination_accounts_via_staging_ids(self):
+        temporary, directory = self._directory(
+            {
+                "state": "ready",
+                "action": "merge-matching-destination-accounts",
+                "accounts": [
+                    {
+                        "source_uid": 1,
+                        "source_userid": 1,
+                        "target_uid": 50,
+                        "target_userid": 60,
+                        "staging_uid": 100,
+                        "staging_userid": 110,
+                    }
+                ],
+                "recovery_account": {
+                    "original_uid": 2,
+                    "original_userid": 2,
+                    "replacement_uid": 101,
+                    "replacement_userid": 111,
+                },
+            }
+        )
+        with temporary:
+            sql, summary = build_account_stage(directory)
+
+        self.assertIn("UPDATE `user_password` SET `uid`=100 WHERE `uid`=50", sql)
+        self.assertIn("UPDATE `user_password` SET `uid`=1 WHERE `uid`=100", sql)
+        self.assertIn("UPDATE `user_password` SET `uid`=101 WHERE `uid`=2", sql)
+        self.assertIn("UPDATE `dlog` SET `userid`=110 WHERE `userid`=60", sql)
+        self.assertIn("UPDATE `dlog` SET `userid`=1 WHERE `userid`=110", sql)
+        self.assertNotIn("INSERT INTO `user`", sql)
+        self.assertEqual(summary["merged_accounts"], 1)
+        self.assertEqual(summary["preserved_passwords"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

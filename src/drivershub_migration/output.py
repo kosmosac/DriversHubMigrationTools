@@ -117,6 +117,22 @@ def render_target_preflight(report: dict[str, object]) -> str:
                 ", ".join(matched_by) if isinstance(matched_by, list) else "unknown",
             )
         )
+    elif isinstance(bootstrap, dict) and bootstrap.get("action") == "merge-matching-destination-accounts":
+        lines.append(_line("Matched destination accounts", bootstrap.get("matched_accounts", 0)))
+        recovery = bootstrap.get("recovery_account")
+        if isinstance(recovery, dict):
+            lines.extend(
+                [
+                    _line(
+                        "Recovery UID",
+                        f'{recovery.get("original_uid")} -> {recovery.get("replacement_uid")}',
+                    ),
+                    _line(
+                        "Recovery member ID",
+                        f'{recovery.get("original_userid")} -> {recovery.get("replacement_userid")}',
+                    ),
+                ]
+            )
     if state == "complete":
         lines.append("Next: the destination is ready for an import dry run.")
     elif isinstance(bootstrap, dict) and bootstrap.get("state") == "ready":

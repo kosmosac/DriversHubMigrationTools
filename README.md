@@ -236,9 +236,16 @@ use the same migration rules. Neither assumes fixed IDs for the destination
 administrator. If the only destination account matches exactly one imported
 administrator by email, Discord ID, or Steam ID, the report proposes a merge.
 If no source administrator matches, it proposes new collision-free IDs that
-retain the bootstrap account as an accessible recovery administrator. Multiple
-destination accounts and ambiguous identity matches require a manual decision.
-No account is changed by this command.
+retain the bootstrap account as an accessible recovery administrator.
+
+The preflight also supports a freshly initialized destination on which source
+users have already registered. Every such destination account must match a
+different source account unambiguously by email, Discord ID, or Steam ID. One
+additional unmatched bootstrap account is allowed and is retained under new
+collision-free IDs as the recovery administrator. Missing, duplicate, or
+contradictory identity matches stop the import. This does not support merging
+arbitrary content from an already active destination Hub. No account is changed
+by the preflight command.
 
 ## Preview the import
 
@@ -259,9 +266,9 @@ the destination.
 ## Import accounts
 
 The account stage is the first writing import stage. It preserves source UIDs
-and member IDs. A matching bootstrap administrator keeps the destination
-password and MFA enrollment. Otherwise, the bootstrap administrator is moved
-to the recovery IDs shown by `preflight-target`. Imported users keep their
+and member IDs. A matching destination account keeps its destination password
+and MFA enrollment. The unmatched bootstrap administrator is moved to the
+recovery IDs shown by `preflight-target`. Imported users keep their
 Steam ID, Discord ID, email address, roles, profile, join timestamp, and
 selected tracker. Passwords and MFA secrets are not imported.
 

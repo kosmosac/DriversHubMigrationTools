@@ -170,6 +170,39 @@ def _merge_bootstrap_account(
     return statements
 
 
+def _move_existing_account(
+    old_uid: int,
+    old_userid: int | None,
+    new_uid: int,
+    new_userid: int | None,
+) -> list[str]:
+    """Move an existing account and its known references to new internal IDs."""
+    statements: list[str] = []
+    if old_uid != new_uid:
+        for table, columns in UID_REFERENCES.items():
+            for column in columns:
+                statements.append(
+                    f"UPDATE `{table}` SET `{column}`={new_uid} WHERE `{column}`={old_uid};"
+                )
+    if old_userid is not None and new_userid is not None and old_userid != new_userid:
+        for table, columns in USERID_REFERENCES.items():
+            for column in columns:
+                statements.append(
+                    f"UPDATE `{table}` SET `{column}`={new_userid} "
+                    f"WHERE `{column}`={old_userid};"
+                )
+    assignments = []
+    if old_uid != new_uid:
+        assignments.append(f"`uid`={new_uid}")
+    if old_userid != new_userid:
+        assignments.append(f"`userid`={_sql_value(new_userid)}")
+    if assignments:
+        statements.append(
+            "UPDATE `user` SET " + ",".join(assignments) + f" WHERE `uid`={old_uid};"
+        )
+    return statements
+
+
 def build_account_stage(directory: Path) -> tuple[str, dict[str, object]]:
     """Return a single UTC transaction and a non-sensitive stage summary."""
     preflight = _read_object(
@@ -187,11 +220,12 @@ def build_account_stage(directory: Path) -> tuple[str, dict[str, object]]:
 
     action = bootstrap.get("action", "not-required")
     statements = ["SET time_zone = '+00:00';", "START TRANSACTION;"]
-    merged_source_uid: int | None = None
+    merged_source_uids: set[int] = set()
     if action == "retain-as-recovery-account":
         statements.extend(_relocate_recovery_account(bootstrap))
     elif action == "merge-with-source-administrator":
         merged_source_uid = _integer(bootstrap.get("source_uid"), "source_uid")
+        merged_source_uids.add(merged_source_uid)
         matching_account = next(
             (
                 account
@@ -207,6 +241,59 @@ def build_account_stage(directory: Path) -> tuple[str, dict[str, object]]:
             matching_account.get("target_userid"), "target_userid", optional=True
         )
         statements.extend(_merge_bootstrap_account(bootstrap, source_userid))
+    elif action == "merge-matching-destination-accounts":
+        accounts = bootstrap.get("accounts")
+        if not isinstance(accounts, list) or not accounts:
+            raise ValueError("The destination account merge has no accounts")
+
+        recovery = bootstrap.get("recovery_account")
+        if recovery is not None:
+            if not isinstance(recovery, dict):
+                raise ValueError("The destination recovery account is not an object")
+            statements.extend(_relocate_recovery_account(recovery))
+
+        # Vacate current IDs before assigning preserved source IDs. This makes
+        # swaps between two existing destination accounts collision-safe.
+        for account in accounts:
+            if not isinstance(account, dict):
+                raise ValueError("Destination account merge entry is not an object")
+            target_uid = _integer(account.get("target_uid"), "target_uid")
+            target_userid = _integer(
+                account.get("target_userid"), "target_userid", optional=True
+            )
+            staging_uid = _integer(
+                account.get("staging_uid", target_uid), "staging_uid"
+            )
+            staging_userid = _integer(
+                account.get("staging_userid", target_userid),
+                "staging_userid",
+                optional=True,
+            )
+            statements.extend(
+                _move_existing_account(
+                    target_uid, target_userid, staging_uid, staging_userid
+                )
+            )
+
+        for account in accounts:
+            source_uid = _integer(account.get("source_uid"), "source_uid")
+            source_userid = _integer(
+                account.get("source_userid"), "source_userid", optional=True
+            )
+            current_uid = _integer(
+                account.get("staging_uid", account.get("target_uid")), "current_uid"
+            )
+            current_userid = _integer(
+                account.get("staging_userid", account.get("target_userid")),
+                "current_userid",
+                optional=True,
+            )
+            statements.extend(
+                _move_existing_account(
+                    current_uid, current_userid, source_uid, source_userid
+                )
+            )
+            merged_source_uids.add(source_uid)
     elif action != "not-required":
         raise ValueError(f"Unsupported bootstrap action: {action}")
 
@@ -240,7 +327,7 @@ def build_account_stage(directory: Path) -> tuple[str, dict[str, object]]:
             "mfa_secret": "",
             "tracker_in_use": TRACKER_IDS.get(str(profile.get("tracker", "")).lower(), 0),
         }
-        if uid == merged_source_uid:
+        if uid in merged_source_uids:
             assignments = ",".join(
                 f"`{column}`={_sql_value(value)}"
                 for column, value in values.items()

@@ -47,10 +47,111 @@ def _bootstrap_resolution(
 ) -> dict[str, object]:
     if not target_accounts:
         return {"state": "not-required", "reason": "The destination has no account."}
-    if len(target_accounts) != 1:
+    if len(target_accounts) > 1:
+        actions: list[dict[str, object]] = []
+        conflicts: list[dict[str, object]] = []
+        unmatched: list[dict[str, object]] = []
+        matched_source_uids: dict[object, object] = {}
+        for target in target_accounts:
+            matches: dict[object, set[str]] = {}
+            for source in source_accounts:
+                for field in ("steamid", "discordid", "email"):
+                    source_value = _identity(source.get(field), email=field == "email")
+                    target_value = _identity(target.get(field), email=field == "email")
+                    if source_value is not None and source_value == target_value:
+                        matches.setdefault(source["source_uid"], set()).add(field)
+            if not matches:
+                unmatched.append(target)
+                continue
+            if len(matches) != 1:
+                conflicts.append(
+                    {
+                        "target_uid": target.get("uid"),
+                        "target_userid": target.get("userid"),
+                        "reason": "Target identities match different source accounts.",
+                        "candidate_source_uids": sorted(matches),
+                    }
+                )
+                continue
+            source_uid, fields = next(iter(matches.items()))
+            if source_uid in matched_source_uids:
+                conflicts.append(
+                    {
+                        "target_uid": target.get("uid"),
+                        "target_userid": target.get("userid"),
+                        "reason": "Multiple target accounts match the same source account.",
+                        "source_uid": source_uid,
+                        "other_target_uid": matched_source_uids[source_uid],
+                    }
+                )
+                continue
+            matched_source_uids[source_uid] = target.get("uid")
+            source = next(
+                account for account in source_accounts if account["source_uid"] == source_uid
+            )
+            actions.append(
+                {
+                    "source_uid": source_uid,
+                    "source_userid": source.get("target_userid"),
+                    "target_uid": target.get("uid"),
+                    "target_userid": target.get("userid"),
+                    "matched_by": sorted(fields),
+                }
+            )
+        if len(unmatched) > 1:
+            conflicts.extend(
+                {
+                    "target_uid": target.get("uid"),
+                    "target_userid": target.get("userid"),
+                    "reason": "More than one destination account has no source identity match.",
+                }
+                for target in unmatched
+            )
+        if conflicts:
+            return {
+                "state": "manual-decision-required",
+                "reason": "Not every destination account has a unique source identity match.",
+                "matches": actions,
+                "conflicts": conflicts,
+            }
+
+        used_uids = {
+            value
+            for account in [*source_accounts, *target_accounts]
+            if isinstance((value := account.get("target_uid", account.get("uid"))), int)
+        }
+        used_userids = {
+            value
+            for account in [*source_accounts, *target_accounts]
+            if isinstance((value := account.get("target_userid", account.get("userid"))), int)
+            and value >= 0
+        }
+        next_uid = max(used_uids, default=0) + 1
+        next_userid = max(used_userids, default=0) + 1
+        recovery = None
+        if unmatched:
+            target = unmatched[0]
+            recovery = {
+                "original_uid": target.get("uid"),
+                "original_userid": target.get("userid"),
+                "replacement_uid": next_uid,
+                "replacement_userid": next_userid,
+            }
+            next_uid += 1
+            next_userid += 1
+        for action in actions:
+            if action["target_uid"] != action["source_uid"]:
+                action["staging_uid"] = next_uid
+                next_uid += 1
+            if action["target_userid"] != action["source_userid"]:
+                action["staging_userid"] = next_userid
+                next_userid += 1
         return {
-            "state": "manual-decision-required",
-            "reason": "The destination contains more than one account.",
+            "state": "ready",
+            "action": "merge-matching-destination-accounts",
+            "accounts": actions,
+            "matched_accounts": len(actions),
+            "recovery_account": recovery,
         }
 
     bootstrap = target_accounts[0]

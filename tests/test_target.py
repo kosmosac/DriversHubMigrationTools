@@ -93,6 +93,70 @@ class TargetPreflightTests(unittest.TestCase):
             self.assertEqual(result["bootstrap"]["source_uid"], 12)
             self.assertEqual(result["bootstrap"]["matched_by"], ["email", "steamid"])
 
+    @patch("drivershub_migration.target.create_import_plan")
+    def test_matches_multiple_destination_accounts_one_to_one(self, create_plan):
+        create_plan.return_value = {
+            "state": "complete",
+            "accounts": [
+                {"source_uid": 10, "target_uid": 10, "target_userid": 20,
+                 "email": "one@example.com", "steamid": 101, "discordid": None},
+                {"source_uid": 11, "target_uid": 11, "target_userid": 21,
+                 "email": "two@example.com", "steamid": 102, "discordid": None},
+            ],
+        }
+        with TemporaryDirectory() as migration_temp, TemporaryDirectory() as target_temp:
+            migration = Path(migration_temp)
+            target = Path(target_temp)
+            (target / "compose.yaml").write_text("services: {}\n")
+            (target / ".env").write_text("DB_PASSWORD=test\n")
+
+            def runner(*args, **kwargs):
+                rows = [
+                    {"uid": 1, "userid": 1, "email": "ONE@example.com", "steamid": 101},
+                    {"uid": 2, "userid": 2, "email": "two@example.com", "steamid": 102},
+                ]
+                return subprocess.CompletedProcess(
+                    args[0], 0, stdout="".join(json.dumps(row) + "\n" for row in rows), stderr=""
+                )
+
+            result = preflight_target(migration, target, runner=runner)
+            resolution = result["bootstrap"]
+            self.assertEqual(resolution["state"], "ready")
+            self.assertEqual(resolution["action"], "merge-matching-destination-accounts")
+            self.assertEqual(resolution["matched_accounts"], 2)
+            self.assertEqual(resolution["accounts"][0]["matched_by"], ["email", "steamid"])
+
+    @patch("drivershub_migration.target.create_import_plan")
+    def test_retains_one_unmatched_account_as_recovery(self, create_plan):
+        create_plan.return_value = {
+            "state": "complete",
+            "accounts": [
+                {"source_uid": 10, "target_uid": 10, "target_userid": 20,
+                 "email": "one@example.com", "steamid": None, "discordid": None},
+            ],
+        }
+        with TemporaryDirectory() as migration_temp, TemporaryDirectory() as target_temp:
+            migration = Path(migration_temp)
+            target = Path(target_temp)
+            (target / "compose.yaml").write_text("services: {}\n")
+            (target / ".env").write_text("DB_PASSWORD=test\n")
+
+            def runner(*args, **kwargs):
+                rows = [
+                    {"uid": 1, "userid": 1, "email": "one@example.com"},
+                    {"uid": 2, "userid": 2, "email": "unknown@example.com"},
+                ]
+                return subprocess.CompletedProcess(
+                    args[0], 0, stdout="".join(json.dumps(row) + "\n" for row in rows), stderr=""
+                )
+
+            result = preflight_target(migration, target, runner=runner)
+            resolution = result["bootstrap"]
+            self.assertEqual(resolution["state"], "ready")
+            self.assertEqual(resolution["matched_accounts"], 1)
+            self.assertEqual(resolution["recovery_account"]["original_uid"], 2)
+            self.assertGreater(resolution["recovery_account"]["replacement_uid"], 10)
+
     @patch("drivershub_migration.target._read_mariadb_accounts")
     @patch("drivershub_migration.target.create_import_plan")
     def test_supports_direct_mariadb_target(self, create_plan, read_accounts):

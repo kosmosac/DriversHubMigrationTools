@@ -490,6 +490,14 @@ The relocation logic is allowed only for a fresh destination whose bootstrap
 account and related initialization records passed preflight; it must not be
 used to rearrange an established destination.
 
+A fresh destination may contain multiple accounts when users from the source
+Hub registered before the import. Each existing account must match exactly one
+different source account by normalized email, Discord ID, or Steam ID. Those
+accounts are moved to their preserved source IDs in a single transaction and
+retain destination passwords and MFA enrollment. Exactly one additional
+unmatched bootstrap account may be retained as the recovery administrator.
+Any missing, duplicate, or contradictory identity match blocks the import.
+
 ### Import order
 
 After the empty destination is initialized and stopped, import in this order:
