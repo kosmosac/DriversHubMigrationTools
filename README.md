@@ -397,6 +397,31 @@ import. Where the source API omits a relationship timestamp, the referenced
 delivery's verified Unix timestamp is used; pending division requests remain
 explicitly unprocessed.
 
+## Verify and start the destination
+
+Keep the writer services stopped and verify the completed import against the
+destination database:
+
+```bash
+.venv/bin/drivershub-migrate verify-target
+```
+
+This compares the imported table counts with the completed stage journal and
+checks delivery, challenge, and division relationships for missing referenced
+records. It writes the detailed result to `target-verification.json`. Do not
+start the Hub when the command reports a mismatch or integrity violation.
+
+After a successful verification, start the Docker AIO services:
+
+```bash
+cd /path/to/DriversHubDockerAIO
+docker compose up -d
+```
+
+Then verify login and account claiming, configuration and branding, recent
+deliveries, applications, events, challenges, and economy balances in the Web
+UI. Keep the pre-import database backup until these checks are complete.
+
 ## Development
 
 Run the test suite with the Python standard library:

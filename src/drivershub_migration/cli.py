@@ -30,6 +30,7 @@ from .output import (
     render_verification,
 )
 from .relationship_writer import import_relationships
+from .final_verification import verify_target
 from .target import preflight_target
 from .verify import verify_export
 
@@ -181,6 +182,12 @@ def parser() -> argparse.ArgumentParser:
     relationship_command.add_argument("--approve", action="store_true")
     relationship_command.add_argument("--backup-confirmed", action="store_true")
     relationship_command.add_argument("--writers-stopped", action="store_true")
+    final_command = commands.add_parser(
+        "verify-target", help="Verify the completed import in the stopped destination"
+    )
+    final_command.add_argument("--output", type=Path)
+    final_command.add_argument("--target", type=Path)
+    final_command.add_argument("--writers-stopped", action="store_true")
     dry_run_command.add_argument(
         "--target",
         type=Path,
@@ -249,6 +256,7 @@ def main(argv: list[str] | None = None) -> int:
         "import-economy",
         "import-deliveries",
         "import-relationships",
+        "verify-target",
     }:
         output_value = args.output or setting("DRIVERSHUB_MIGRATION_DIRECTORY")
         target_mode = (setting("DRIVERSHUB_TARGET_MODE") or "aio").lower()
@@ -383,6 +391,13 @@ def main(argv: list[str] | None = None) -> int:
                     approved=args.approve, backup_confirmed=args.backup_confirmed,
                     writers_stopped=args.writers_stopped,
                 )
+            elif args.command == "verify-target":
+                report = verify_target(
+                    Path(output_value), Path(target_value) if target_value else None,
+                    mode=target_mode,
+                    database={"host": setting("DRIVERSHUB_TARGET_DB_HOST"), "port": setting("DRIVERSHUB_TARGET_DB_PORT"), "user": setting("DRIVERSHUB_TARGET_DB_USER"), "password": setting("DRIVERSHUB_TARGET_DB_PASSWORD"), "database": setting("DRIVERSHUB_TARGET_DB_NAME"), "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET")},
+                    writers_stopped=args.writers_stopped,
+                )
             else:
                 function = preflight_target if args.command == "preflight-target" else create_import_dry_run
                 report = function(
@@ -468,6 +483,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Pending division requests: {report.get('pending_division_requests', 0)}")
             print("Next: keep destination writer services stopped until final verification completes.")
             return 0
+        if args.command == "verify-target":
+            print("Destination verification complete.")
+            print(f"State: {report.get('state')}")
+            print(f"Verified resource counts: {len(report.get('expected', {}))}")
+            print(f"Count mismatches: {len(report.get('count_mismatches', []))}")
+            print(f"Referential-integrity violations: {len(report.get('integrity_violations', {}))}")
+            if report.get("state") == "complete":
+                print("Next: restart the destination Hub and perform the post-import checks below.")
+                return 0
+            print("Do not restart destination writer services; inspect target-verification.json.")
+            return 1
         print(
             json.dumps(report, indent=2, ensure_ascii=False)
             if args.json
