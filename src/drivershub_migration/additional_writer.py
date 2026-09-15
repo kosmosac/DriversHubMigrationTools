@@ -12,7 +12,7 @@ from .poll_task_import import build_poll_task_stage
 from .storage import write_json
 
 
-def _write_stage(directory: Path, target_directory: Path | None, *, name: str, prerequisite: str, builder, mode: str, database: dict[str, object], approved: bool, backup_confirmed: bool, writers_stopped: bool, runner) -> dict[str, object]:
+def _write_stage(directory: Path, target_directory: Path | None, *, name: str, prerequisite: str, builder, mode: str, database: dict[str, object], approved: bool, backup_confirmed: bool, writers_stopped: bool, runner=subprocess.run) -> dict[str, object]:
     if not approved or not backup_confirmed:
         raise ValueError(f"The {name} import requires --approve and --backup-confirmed")
     path = directory / "import-journal.json"
