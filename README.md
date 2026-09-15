@@ -323,6 +323,17 @@ This stage currently imports announcements and downloads, retaining their
 original IDs, authors, timestamps, ordering, visibility, and counters. Other
 plugin resources, economy data, and deliveries are handled by later stages.
 
+Import application records next:
+
+```bash
+.venv/bin/drivershub-migrate import-applications \
+  --approve \
+  --backup-confirmed
+```
+
+This preserves application IDs, applicants, answers, decisions, responsible
+staff members, and original submission and response timestamps.
+
 ## Development
 
 Run the test suite with the Python standard library:
