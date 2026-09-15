@@ -22,6 +22,7 @@ from .event_challenge_writer import import_events_challenges
 from .exporter import export_source
 from .dry_run import create_import_dry_run
 from .economy_writer import import_economy
+from .enrichment import backfill_delivery_details, enrich_economy_transactions
 from .import_plan import create_import_plan
 from .output import (
     render_assessment,
@@ -212,6 +213,23 @@ def parser() -> argparse.ArgumentParser:
         command.add_argument("--approve", action="store_true")
         command.add_argument("--backup-confirmed", action="store_true")
         command.add_argument("--writers-stopped", action="store_true")
+    delivery_backfill = commands.add_parser(
+        "backfill-delivery-details",
+        help="Resume optional delivery detail retrieval against a running destination",
+    )
+    economy_enrichment = commands.add_parser(
+        "enrich-economy-transactions",
+        help="Resume optional transaction timestamp retrieval against a running destination",
+    )
+    for command in (delivery_backfill, economy_enrichment):
+        command.add_argument("--source")
+        command.add_argument("--output", type=Path)
+        command.add_argument("--target", type=Path)
+        command.add_argument("--approve", action="store_true")
+        command.add_argument(
+            "--limit", type=int,
+            help="maximum source requests in this run; omit to process all remaining work",
+        )
     dry_run_command.add_argument(
         "--target",
         type=Path,
@@ -284,6 +302,8 @@ def main(argv: list[str] | None = None) -> int:
         "repair-delivery-placeholders",
         "import-polls-tasks",
         "import-economy-inventory",
+        "backfill-delivery-details",
+        "enrich-economy-transactions",
     }:
         output_value = args.output or setting("DRIVERSHUB_MIGRATION_DIRECTORY")
         target_mode = (setting("DRIVERSHUB_TARGET_MODE") or "aio").lower()
@@ -295,7 +315,34 @@ def main(argv: list[str] | None = None) -> int:
         if target_mode == "aio" and not target_value:
             raise SystemExit("Set DRIVERSHUB_TARGET_DIRECTORY in .env or use --target")
         try:
-            if args.command == "import-accounts":
+            if args.command in {"backfill-delivery-details", "enrich-economy-transactions"}:
+                source = args.source or setting("DRIVERSHUB_SOURCE_URL")
+                token = setting("DRIVERSHUB_APPLICATION_TOKEN")
+                if not source or not token:
+                    raise ValueError("Post-migration jobs require DRIVERSHUB_SOURCE_URL and DRIVERSHUB_APPLICATION_TOKEN")
+                if args.limit is not None and args.limit < 1:
+                    raise ValueError("--limit must be a positive integer")
+                database = {"host": setting("DRIVERSHUB_TARGET_DB_HOST"), "port": setting("DRIVERSHUB_TARGET_DB_PORT"), "user": setting("DRIVERSHUB_TARGET_DB_USER"), "password": setting("DRIVERSHUB_TARGET_DB_PASSWORD"), "database": setting("DRIVERSHUB_TARGET_DB_NAME"), "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET")}
+                if args.command == "backfill-delivery-details":
+                    report = backfill_delivery_details(
+                        Path(output_value), Path(target_value) if target_value else None,
+                        source=source, token=token, mode=target_mode, database=database,
+                        approved=args.approve,
+                        allow_view_updates=boolean_setting("DRIVERSHUB_ALLOW_DELIVERY_VIEW_UPDATES"),
+                        request_interval=float(setting("DRIVERSHUB_REQUEST_INTERVAL") or "1.1"),
+                        limit=args.limit, progress=progress,
+                    )
+                else:
+                    source_timezone = setting("DRIVERSHUB_SOURCE_TIMEZONE")
+                    if not source_timezone:
+                        raise ValueError("Set DRIVERSHUB_SOURCE_TIMEZONE to the source server's IANA time zone")
+                    report = enrich_economy_transactions(
+                        Path(output_value), Path(target_value) if target_value else None,
+                        source=source, token=token, source_timezone=source_timezone,
+                        mode=target_mode, database=database, approved=args.approve,
+                        limit=args.limit, progress=progress,
+                    )
+            elif args.command == "import-accounts":
                 report = import_accounts(
                     Path(output_value),
                     Path(target_value) if target_value else None,
@@ -459,6 +506,28 @@ def main(argv: list[str] | None = None) -> int:
                 )
         except ValueError as exc:
             raise SystemExit(str(exc)) from exc
+        if args.command == "backfill-delivery-details":
+            print("Delivery detail backfill run complete.")
+            print(f"Source requests attempted: {report.get('attempted', 0)}")
+            print(f"Deliveries enriched: {report.get('completed', 0)}")
+            print(f"Failed or unavailable: {report.get('failed', 0) + report.get('unavailable', 0)}")
+            print(f"Delivery placeholders remaining: {report.get('remaining', 0)}")
+            print("Next: run the same command again to resume." if report.get("remaining") else "All available delivery details have been restored.")
+            return 0 if not report.get("failed") else 1
+        if args.command == "enrich-economy-transactions":
+            print("Economy transaction enrichment run complete.")
+            print(f"Source windows attempted: {report.get('attempted_windows', 0)}")
+            print(f"Source rows processed: {report.get('source_rows_processed', 0)}")
+            print(f"Ambiguous local timestamps skipped: {report.get('ambiguous_local_timestamps', 0)}")
+            print(f"Failed windows: {report.get('failed_windows', 0)}")
+            print(f"Transactions still using baseline metadata: {report.get('remaining_transactions', 0)}")
+            if report.get("state") == "incomplete":
+                print("Next: run the same command again to resume.")
+            elif report.get("state") == "complete-with-gaps":
+                print("All source windows were processed; unmatched baseline rows remain marked.")
+            else:
+                print("All identifiable transaction timestamps have been restored.")
+            return 0 if not report.get("failed_windows") else 1
         if args.command == "import-accounts":
             accounts = report["stages"]["accounts"]
             print("Account import complete.")

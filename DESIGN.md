@@ -596,13 +596,15 @@ the note `migration-import/pending-enrichment`. This keeps the history usable,
 sorts later destination transactions ahead of migrated rows, and makes every
 placeholder discoverable without a separate database mapping.
 
-An optional enrichment command may later query the source transaction CSV
+The optional `enrich-economy-transactions` command queries the source transaction CSV
 endpoint in bounded 90-day windows. It must be resumable, honor the endpoint's
 three-requests-per-minute limit, require the source server's time zone to
 interpret its offset-free timestamps, and update only rows that still carry
 the exact migration placeholder. Missing or ambiguous records remain usable
 with their baseline values. Enrichment is never required before the
-destination Hub can be started.
+destination Hub can be started. The source API still does not expose the
+original internal transaction note, so successfully matched rows retain the
+recognizable `migration-import/csv-enriched` marker.
 
 Exact reconstruction still depends on the source fields that were available.
 Missing driver payloads, deleted deliveries, private data, and derived

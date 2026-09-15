@@ -14,8 +14,7 @@ and data hidden behind unavailable external plugins—cannot be obtained through
 the source API. Missing delivery details and economy transaction metadata use
 recognizable placeholders and are designed for later optional enrichment.
 
-See [DESIGN.md](DESIGN.md) for the coverage model, technical limitations, and
-planned enrichment functionality.
+See [DESIGN.md](DESIGN.md) for the coverage model and technical limitations.
 
 The current writing import covers accounts and identities, portable
 configuration and branding, exposed user state, standard-plugin content,
@@ -73,8 +72,9 @@ migration directory in `.env`. Then run:
 .venv/bin/drivershub-migrate assess
 ```
 
-Delete the application token in the source Hub after the final assessment or
-export.
+Delete the application token after the final export unless you intend to run
+the optional post-migration enrichment jobs. Those jobs need source API access
+and can use the same dedicated token while they run.
 
 The assessment only sends HTTP `GET` requests. It writes these files to the
 selected migration directory:
@@ -401,9 +401,9 @@ Current balances and transaction views are imported. The list API does not
 expose the original stored timestamp or internal transaction metadata, so
 these fields use `0` and `migration-import/pending-enrichment` as recognizable
 placeholders. Original transaction IDs, identifiable parties, amounts,
-balances, and visible messages remain available. A future optional,
-resumable enrichment operation can retrieve additional transaction metadata
-while the source Hub remains reachable.
+balances, and visible messages remain available. The optional resumable
+enrichment operation documented below can retrieve the timestamps while the
+source Hub remains reachable.
 
 Import the exported economy inventory after balances and transactions:
 
@@ -482,6 +482,42 @@ After a successful verification, start the Docker AIO services:
 cd /path/to/DriversHubDockerAIO
 docker compose up -d
 ```
+
+## Optional post-migration enrichment
+
+The destination may remain online while the following jobs run. Both jobs are
+resumable: progress and source responses are stored below `enrichment/` in the
+migration directory, completed work is skipped, and destination rows are
+updated only while they still carry the exact migration marker. `--limit N`
+can restrict a run to `N` source requests.
+
+Delivery details and telemetry can be restored individually:
+
+```bash
+.venv/bin/drivershub-migrate backfill-delivery-details --approve
+```
+
+This requires `DRIVERSHUB_ALLOW_DELIVERY_VIEW_UPDATES=true`, because every
+detail request increments the corresponding delivery's view counter on the
+source Hub. A deleted or temporarily unavailable source delivery remains
+usable with its migration placeholder and can be retried later.
+
+Economy transaction timestamps can be restored from the source CSV exports:
+
+```bash
+.venv/bin/drivershub-migrate enrich-economy-transactions --approve
+```
+
+Set `DRIVERSHUB_SOURCE_TIMEZONE` to the IANA time zone used by the source
+server, for example `Europe/Berlin`. The CSV contains local timestamps without
+an offset, and choosing the wrong zone would write incorrect Unix timestamps.
+Timestamps in a repeated or nonexistent daylight-saving transition are left
+unchanged because the CSV cannot identify a unique instant.
+The source endpoint allows only three requests per minute, so this job waits at
+least 20.5 seconds between requests and can take a long time. It also requires
+many requests for a Hub with numerous accounts and a long history. The source
+API does not expose the original internal transaction note; enriched rows
+therefore remain explicitly marked as `migration-import/csv-enriched`.
 
 Then verify login and account claiming, configuration and branding, recent
 deliveries, applications, events, challenges, and economy balances in the Web
