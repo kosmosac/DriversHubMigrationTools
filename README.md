@@ -357,9 +357,13 @@ Import the recoverable economy state next:
   --backup-confirmed
 ```
 
-Current balances are imported. The source transaction API does not expose the original stored timestamp or
-internal transaction metadata, so transaction views cannot be reconstructed
-losslessly and are reported but not inserted.
+Current balances and transaction views are imported. The list API does not
+expose the original stored timestamp or internal transaction metadata, so
+these fields use `0` and `migration-import/pending-enrichment` as recognizable
+placeholders. Original transaction IDs, identifiable parties, amounts,
+balances, and visible messages remain available. A future optional,
+resumable enrichment operation can retrieve additional transaction metadata
+while the source Hub remains reachable.
 
 ## Development
 

@@ -410,8 +410,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "import-economy":
             print("Economy import complete.")
             print(f"Balances: {report.get('balances', 0)}")
-            print(f"Transactions not imported: {report.get('transactions_not_importable', 0)}")
-            print("Reason: the source API does not expose the stored timestamps and internal transaction metadata.")
+            print(f"Transactions: {report.get('transactions', 0)}")
+            print(f"Transactions pending optional enrichment: {report.get('transactions_pending_enrichment', 0)}")
+            print(f"Transactions without identifiable parties: {report.get('transactions_without_identifiable_party', 0)}")
+            print("Missing source timestamps and internal metadata use recognizable placeholders.")
             print("Next: keep destination writer services stopped for the remaining import stages.")
             return 0
         print(

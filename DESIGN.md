@@ -587,6 +587,24 @@ backfill therefore requires the same explicit operator consent as bulk detail
 export. If the source becomes permanently unavailable, the baseline delivery
 history remains usable with its clearly marked placeholder details.
 
+### Deferred economy transaction enrichment
+
+The baseline economy import preserves every exported transaction view. It
+copies the transaction ID, identifiable parties, amount, exposed resulting
+balances, and visible message. Because the list endpoint omits the stored
+timestamp and internal operation note, baseline rows use timestamp `0` and
+the note `migration-import/pending-enrichment`. This keeps the history usable,
+sorts later destination transactions ahead of migrated rows, and makes every
+placeholder discoverable without a separate database mapping.
+
+An optional enrichment command may later query the source transaction CSV
+endpoint in bounded 90-day windows. It must be resumable, honor the endpoint's
+three-requests-per-minute limit, require the source server's time zone to
+interpret its offset-free timestamps, and update only rows that still carry
+the exact migration placeholder. Missing or ambiguous records remain usable
+with their baseline values. Enrichment is never required before the
+destination Hub can be started.
+
 Exact reconstruction still depends on the source fields that were available.
 Missing driver payloads, deleted deliveries, private data, and derived
 statistics must remain documented as gaps. Failure or omission of the optional
