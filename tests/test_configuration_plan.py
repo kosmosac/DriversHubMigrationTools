@@ -27,6 +27,8 @@ class ConfigurationPlanTests(unittest.TestCase):
                                     "webhook_secret": "available-secret",
                                 }
                             ],
+                            "roles": [{"id": 20, "name": "Admin", "discord_role_id": "123"}],
+                            "application_types": [{"id": 1, "name": "Driver", "discord_role_change": ["+123"], "channel_id": "456", "webhook_url": "https://example.invalid/hook"}],
                         },
                         "backup": {},
                     }
@@ -67,17 +69,31 @@ class ConfigurationPlanTests(unittest.TestCase):
             self.assertNotIn("smtp_password", result["backend"]["portable"])
             self.assertEqual(
                 result["backend"]["protected"]["smtp_password"]["state"],
-                "destination-value-required",
+                "retain-destination-value",
             )
+            self.assertNotIn("smtp_host", result["backend"]["portable"])
+            self.assertNotIn("trackers", result["backend"]["portable"])
             self.assertEqual(
-                result["backend"]["portable"]["trackers"][0]["api_token"],
-                "available-token",
+                result["backend"]["protected"]["trackers"]["state"],
+                "retain-destination-value",
             )
+            self.assertIsNone(
+                result["backend"]["portable"]["roles"][0]["discord_role_id"]
+            )
+            application = result["backend"]["portable"]["application_types"][0]
+            self.assertEqual(application["discord_role_change"], [])
+            self.assertEqual(application["channel_id"], "")
+            self.assertEqual(application["webhook_url"], "")
             self.assertEqual(result["frontend"]["portable"]["color"], "112233")
             self.assertNotIn("abbr", result["frontend"]["portable"])
+            self.assertNotIn("logo_key", result["frontend"]["portable"])
             self.assertEqual(
                 result["frontend"]["runtime_managed"]["abbr"],
                 "derive-from-destination-backend",
+            )
+            self.assertEqual(
+                result["frontend"]["branding_keys"]["logo_key"],
+                "derive-from-imported-asset",
             )
             self.assertEqual(result["branding"]["logo"]["state"], "ready")
             self.assertEqual(result["branding"]["banner"]["state"], "unavailable")

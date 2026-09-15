@@ -9,7 +9,7 @@ description = "Assessment and migration tools for Drivers Hub"
 requires-python = ">=3.11"
 license = { text = "AGPL-3.0-or-later" }
 authors = [{ name = "Kosmos", email = "me@kosmos.ac" }]
-dependencies = ["PyMySQL>=1.1,<2"]
+dependencies = ["PyMySQL>=1.1,<2", "zstandard>=0.23,<1"]
 
 [project.scripts]
 drivershub-migrate = "drivershub_migration.cli:main"

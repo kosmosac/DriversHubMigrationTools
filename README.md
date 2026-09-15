@@ -262,6 +262,36 @@ For a direct MariaDB destination, stop all backend writers yourself and add
 `--writers-stopped` to the command. This is an explicit confirmation because
 the tool cannot inspect services outside the Docker AIO deployment.
 
+## Import configuration and branding
+
+Update the installed command after pulling a version that adds dependencies:
+
+```bash
+.venv/bin/python -m pip install -e .
+```
+
+With the destination writer services still stopped, import the portable Hub
+configuration and the exported branding assets:
+
+```bash
+.venv/bin/drivershub-migrate import-configuration \
+  --approve \
+  --backup-confirmed
+```
+
+The source tracker configuration is not imported. The command also retains
+the destination values for Discord and OAuth, Steam, SMTP, captcha, MariaDB,
+Redis, webhooks, forwarding targets, and other destination integrations.
+Discord role mappings in imported roles, ranks, and applications
+use matching values already present in the destination configuration or remain
+empty when no destination mapping exists.
+
+The command imports the remaining portable backend settings, frontend
+appearance settings, logo, banner, and background image. It writes the JSON
+file atomically and updates frontend configuration and assets in one database
+transaction. Do not restart the Hub until all remaining import stages have
+completed.
+
 ## Development
 
 Run the test suite with the Python standard library:

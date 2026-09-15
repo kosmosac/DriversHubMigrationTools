@@ -10,6 +10,7 @@ import sys
 
 from .assess import assess
 from .account_writer import import_accounts
+from .configuration_writer import import_configuration
 from .env import read_env
 from .exporter import export_source
 from .dry_run import create_import_dry_run
@@ -107,6 +108,16 @@ def parser() -> argparse.ArgumentParser:
     account_command.add_argument("--approve", action="store_true")
     account_command.add_argument("--backup-confirmed", action="store_true")
     account_command.add_argument("--writers-stopped", action="store_true")
+    configuration_command = commands.add_parser(
+        "import-configuration",
+        help="Import portable configuration and branding into a stopped destination",
+    )
+    configuration_command.add_argument("--output", type=Path)
+    configuration_command.add_argument("--target", type=Path)
+    configuration_command.add_argument("--config-path", type=Path)
+    configuration_command.add_argument("--approve", action="store_true")
+    configuration_command.add_argument("--backup-confirmed", action="store_true")
+    configuration_command.add_argument("--writers-stopped", action="store_true")
     dry_run_command.add_argument(
         "--target",
         type=Path,
@@ -163,7 +174,12 @@ def main(argv: list[str] | None = None) -> int:
             return 0 if report["integrity"] == "valid" and report["export"] == "complete" else 1
         return 0 if report["state"] == "complete" else 1
 
-    if args.command in {"preflight-target", "dry-run-import", "import-accounts"}:
+    if args.command in {
+        "preflight-target",
+        "dry-run-import",
+        "import-accounts",
+        "import-configuration",
+    }:
         output_value = args.output or setting("DRIVERSHUB_MIGRATION_DIRECTORY")
         target_mode = (setting("DRIVERSHUB_TARGET_MODE") or "aio").lower()
         target_value = args.target or setting("DRIVERSHUB_TARGET_DIRECTORY")
@@ -178,6 +194,28 @@ def main(argv: list[str] | None = None) -> int:
                 report = import_accounts(
                     Path(output_value),
                     Path(target_value) if target_value else None,
+                    mode=target_mode,
+                    database={
+                        "host": setting("DRIVERSHUB_TARGET_DB_HOST"),
+                        "port": setting("DRIVERSHUB_TARGET_DB_PORT"),
+                        "user": setting("DRIVERSHUB_TARGET_DB_USER"),
+                        "password": setting("DRIVERSHUB_TARGET_DB_PASSWORD"),
+                        "database": setting("DRIVERSHUB_TARGET_DB_NAME"),
+                        "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET"),
+                    },
+                    approved=args.approve,
+                    backup_confirmed=args.backup_confirmed,
+                    writers_stopped=args.writers_stopped,
+                )
+            elif args.command == "import-configuration":
+                report = import_configuration(
+                    Path(output_value),
+                    Path(target_value) if target_value else None,
+                    args.config_path or (
+                        Path(value)
+                        if (value := setting("DRIVERSHUB_TARGET_CONFIG_PATH"))
+                        else None
+                    ),
                     mode=target_mode,
                     database={
                         "host": setting("DRIVERSHUB_TARGET_DB_HOST"),
@@ -213,6 +251,13 @@ def main(argv: list[str] | None = None) -> int:
             print("Account import complete.")
             print(f"Imported accounts: {accounts.get('inserted_accounts', 0)}")
             print(f"Merged accounts: {accounts.get('merged_accounts', 0)}")
+            print("Next: keep destination writer services stopped for the remaining import stages.")
+            return 0
+        if args.command == "import-configuration":
+            print("Configuration import complete.")
+            print(f"Portable backend values: {report.get('portable_backend_values', 0)}")
+            print(f"Branding assets: {report.get('branding_assets', 0)}")
+            print("Destination infrastructure and integration settings retained: yes")
             print("Next: keep destination writer services stopped for the remaining import stages.")
             return 0
         print(
