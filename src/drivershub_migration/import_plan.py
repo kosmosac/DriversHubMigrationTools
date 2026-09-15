@@ -20,6 +20,20 @@ def _identifier(value: object) -> int | None:
     return None
 
 
+def _userid(value: object) -> tuple[bool, int | None]:
+    if value is None:
+        return True, None
+    if isinstance(value, bool):
+        return False, None
+    if isinstance(value, int):
+        return True, value
+    if isinstance(value, str):
+        normalized = value.strip()
+        if normalized.removeprefix("-").isdigit():
+            return True, int(normalized)
+    return False, None
+
+
 def create_import_plan(directory: Path) -> dict[str, object]:
     verification = verify_export(directory)
     if verification["integrity"] != "valid" or verification["export"] != "complete":
@@ -48,8 +62,8 @@ def create_import_plan(directory: Path) -> dict[str, object]:
             conflicts.append({"field": "profile", "error": "Profile is not an object"})
             continue
         uid = _identifier(profile.get("uid"))
-        userid = profile.get("userid")
-        if uid is None or not isinstance(userid, int):
+        valid_userid, userid = _userid(profile.get("userid"))
+        if uid is None or not valid_userid:
             conflicts.append(
                 {"field": "identity", "error": "Profile has no valid uid or userid"}
             )

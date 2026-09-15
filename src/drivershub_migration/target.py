@@ -133,7 +133,8 @@ def preflight_target(
     source_userids = {
         account["target_userid"]
         for account in source_accounts
-        if account["target_userid"] >= 0
+        if isinstance(account["target_userid"], int)
+        and account["target_userid"] >= 0
     }
     collisions = []
     for account in target_accounts:

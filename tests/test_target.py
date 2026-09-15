@@ -39,7 +39,10 @@ class TargetPreflightTests(unittest.TestCase):
     def test_supports_direct_mariadb_target(self, create_plan, read_accounts):
         create_plan.return_value = {
             "state": "complete",
-            "accounts": [{"target_uid": 1, "target_userid": 1}],
+            "accounts": [
+                {"target_uid": 1, "target_userid": 1},
+                {"target_uid": 2, "target_userid": None},
+            ],
         }
         read_accounts.return_value = []
         with TemporaryDirectory() as migration_temp:

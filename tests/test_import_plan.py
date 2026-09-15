@@ -29,15 +29,17 @@ class ImportPlanTests(unittest.TestCase):
                     {"uid": 2, "userid": -1, "name": "Two", "discordid": "456"},
                     {"uid": 3, "userid": 7, "name": "Three", "email": "three@example.com"},
                     {"uid": 4, "userid": 8, "name": "Four"},
+                    {"uid": 5, "userid": None, "name": "Five", "steamid": "789"},
                 ],
             )
             result = create_import_plan(directory)
             self.assertEqual(result["state"], "complete")
-            self.assertEqual(result["summary"]["claimable"], 3)
+            self.assertEqual(result["summary"]["claimable"], 4)
             self.assertEqual(result["summary"]["manual_recovery_required"], 1)
             self.assertEqual(result["accounts"][0]["target_uid"], 1)
             self.assertEqual(result["accounts"][0]["claim_methods"], ["steam"])
             self.assertEqual(result["accounts"][2]["claim_methods"], ["email"])
+            self.assertIsNone(result["accounts"][4]["target_userid"])
 
     @patch("drivershub_migration.import_plan.verify_export")
     @patch("drivershub_migration.import_plan.create_configuration_plan")
