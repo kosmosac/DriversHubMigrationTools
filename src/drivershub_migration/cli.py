@@ -11,11 +11,13 @@ import sys
 from .assess import assess
 from .env import read_env
 from .exporter import export_source
+from .dry_run import create_import_dry_run
 from .import_plan import create_import_plan
 from .output import (
     render_assessment,
     render_export,
     render_import_plan,
+    render_import_dry_run,
     render_target_preflight,
     render_verification,
 )
@@ -68,7 +70,7 @@ def parser() -> argparse.ArgumentParser:
         help="migration directory; overrides DRIVERSHUB_MIGRATION_DIRECTORY",
     )
     plan_command = commands.add_parser(
-        "plan-import", help="Create a non-writing destination identity plan"
+        "plan-import", help="Create a non-writing destination import plan"
     )
     plan_command.add_argument(
         "--output",
@@ -84,6 +86,19 @@ def parser() -> argparse.ArgumentParser:
         help="migration directory; overrides DRIVERSHUB_MIGRATION_DIRECTORY",
     )
     target_command.add_argument(
+        "--target",
+        type=Path,
+        help="Docker AIO directory; overrides DRIVERSHUB_TARGET_DIRECTORY",
+    )
+    dry_run_command = commands.add_parser(
+        "dry-run-import", help="Plan destination writes without modifying the destination"
+    )
+    dry_run_command.add_argument(
+        "--output",
+        type=Path,
+        help="migration directory; overrides DRIVERSHUB_MIGRATION_DIRECTORY",
+    )
+    dry_run_command.add_argument(
         "--target",
         type=Path,
         help="Docker AIO directory; overrides DRIVERSHUB_TARGET_DIRECTORY",
@@ -139,7 +154,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0 if report["integrity"] == "valid" and report["export"] == "complete" else 1
         return 0 if report["state"] == "complete" else 1
 
-    if args.command == "preflight-target":
+    if args.command in {"preflight-target", "dry-run-import"}:
         output_value = args.output or setting("DRIVERSHUB_MIGRATION_DIRECTORY")
         target_mode = (setting("DRIVERSHUB_TARGET_MODE") or "aio").lower()
         target_value = args.target or setting("DRIVERSHUB_TARGET_DIRECTORY")
@@ -150,27 +165,34 @@ def main(argv: list[str] | None = None) -> int:
         if target_mode == "aio" and not target_value:
             raise SystemExit("Set DRIVERSHUB_TARGET_DIRECTORY in .env or use --target")
         try:
-            report = preflight_target(
-                Path(output_value),
-                Path(target_value) if target_value else None,
-                mode=target_mode,
-                database={
-                    "host": setting("DRIVERSHUB_TARGET_DB_HOST"),
-                    "port": setting("DRIVERSHUB_TARGET_DB_PORT"),
-                    "user": setting("DRIVERSHUB_TARGET_DB_USER"),
-                    "password": setting("DRIVERSHUB_TARGET_DB_PASSWORD"),
-                    "database": setting("DRIVERSHUB_TARGET_DB_NAME"),
-                    "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET"),
-                },
-            )
+            function = preflight_target if args.command == "preflight-target" else create_import_dry_run
+            report = function(
+                    Path(output_value),
+                    Path(target_value) if target_value else None,
+                    mode=target_mode,
+                    database={
+                        "host": setting("DRIVERSHUB_TARGET_DB_HOST"),
+                        "port": setting("DRIVERSHUB_TARGET_DB_PORT"),
+                        "user": setting("DRIVERSHUB_TARGET_DB_USER"),
+                        "password": setting("DRIVERSHUB_TARGET_DB_PASSWORD"),
+                        "database": setting("DRIVERSHUB_TARGET_DB_NAME"),
+                        "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET"),
+                    },
+                )
         except ValueError as exc:
             raise SystemExit(str(exc)) from exc
         print(
             json.dumps(report, indent=2, ensure_ascii=False)
             if args.json
-            else render_target_preflight(report)
+            else (
+                render_target_preflight(report)
+                if args.command == "preflight-target"
+                else render_import_dry_run(report, Path(output_value))
+            )
         )
-        return 0 if report["state"] in {"complete", "action-required"} else 1
+        if args.command == "preflight-target":
+            return 0 if report["state"] in {"complete", "action-required"} else 1
+        return 0 if report["state"] == "ready" else 1
 
     if args.command in {"assess", "export"}:
         source = args.source or setting("DRIVERSHUB_SOURCE_URL")

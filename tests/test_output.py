@@ -2,6 +2,7 @@ from pathlib import Path
 import unittest
 
 from drivershub_migration.output import (
+    render_import_dry_run,
     render_import_plan,
     render_target_preflight,
     render_verification,
@@ -9,6 +10,30 @@ from drivershub_migration.output import (
 
 
 class HumanOutputTests(unittest.TestCase):
+    def test_dry_run_reports_placeholders_and_no_writes(self):
+        text = render_import_dry_run(
+            {
+                "state": "ready",
+                "bootstrap": {"action": "retain-as-recovery-account"},
+                "stages": {
+                    "configuration": {
+                        "portable_backend_values": 4,
+                        "protected_destination_values": ["smtp_password"],
+                        "branding_assets": 3,
+                    },
+                    "accounts": {"items": 3},
+                    "core_resources": {"profiles": 3},
+                    "plugin_resources": {},
+                    "economy": {},
+                    "deliveries": {"baseline_items": 10, "placeholder_items": 10},
+                },
+            },
+            Path("migrations/example"),
+        )
+        self.assertIn("Import dry run ready.", text)
+        self.assertIn("Target modified: no", text)
+        self.assertIn("Deliveries using placeholders: 10", text)
+
     def test_verification_includes_result_and_next_step(self):
         text = render_verification(
             {

@@ -213,6 +213,22 @@ retain the bootstrap account as an accessible recovery administrator. Multiple
 destination accounts and ambiguous identity matches require a manual decision.
 No account is changed by this command.
 
+## Preview the import
+
+After destination preflight, create a complete non-writing summary of the
+planned import:
+
+```bash
+.venv/bin/drivershub-migrate dry-run-import
+```
+
+The command refreshes the destination preflight and writes
+`import-dry-run.json`. It reports planned configuration, branding, accounts,
+content, economy data, and deliveries. When delivery details were not exported,
+the report shows how many deliveries require schema-compatible placeholders
+and can be completed by a later optional backfill. The command does not modify
+the destination.
+
 ## Development
 
 Run the test suite with the Python standard library:

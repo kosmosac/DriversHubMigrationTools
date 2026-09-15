@@ -124,3 +124,37 @@ def render_target_preflight(report: dict[str, object]) -> str:
     else:
         lines.append("Next: resolve the destination decisions listed in target-preflight.json.")
     return "\n".join(lines)
+
+
+def render_import_dry_run(report: dict[str, object], directory: Path) -> str:
+    stages = report.get("stages", {})
+    configuration = stages.get("configuration", {}) if isinstance(stages, dict) else {}
+    accounts = stages.get("accounts", {}) if isinstance(stages, dict) else {}
+    core = stages.get("core_resources", {}) if isinstance(stages, dict) else {}
+    plugins = stages.get("plugin_resources", {}) if isinstance(stages, dict) else {}
+    economy = stages.get("economy", {}) if isinstance(stages, dict) else {}
+    deliveries = stages.get("deliveries", {}) if isinstance(stages, dict) else {}
+    ready = report.get("state") == "ready"
+    lines = [
+        "Import dry run " + ("ready." if ready else "blocked."),
+        _line("Migration directory", directory),
+        _line("Target modified", "no"),
+        _line("Portable backend values", configuration.get("portable_backend_values", 0)),
+        _line("Destination secrets to retain or provide", len(configuration.get("protected_destination_values", []))),
+        _line("Branding assets", configuration.get("branding_assets", 0)),
+        _line("Accounts", accounts.get("items", 0)),
+        _line("Core resource groups", len(core) if isinstance(core, dict) else 0),
+        _line("Plugin resource groups", len(plugins) if isinstance(plugins, dict) else 0),
+        _line("Economy resource groups", len(economy) if isinstance(economy, dict) else 0),
+        _line("Deliveries", deliveries.get("baseline_items", 0)),
+        _line("Deliveries using placeholders", deliveries.get("placeholder_items", 0)),
+    ]
+    bootstrap = report.get("bootstrap", {})
+    if isinstance(bootstrap, dict):
+        lines.append(_line("Bootstrap action", bootstrap.get("action", bootstrap.get("state", "unknown"))))
+    lines.append(
+        "Next: review import-dry-run.json before approving a writing import."
+        if ready
+        else "Next: resolve the blocked stage in import-dry-run.json and repeat the dry run."
+    )
+    return "\n".join(lines)
