@@ -24,3 +24,28 @@ class UserStateImportTests(unittest.TestCase):
         self.assertIn("VALUES (-1000,7", sql)
         self.assertEqual(summary["personal_notes_skipped"], 1)
         self.assertEqual(summary["role_history_records"], 1)
+
+    def test_replaces_preexisting_state_for_matched_destination_accounts(self):
+        with TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            normalized = directory / "normalized"
+            normalized.mkdir()
+            (normalized / "profiles.json").write_text(json.dumps({"records": []}))
+            (normalized / "bans.json").write_text(json.dumps({"records": []}))
+            (directory / "target-preflight.json").write_text(
+                json.dumps(
+                    {
+                        "bootstrap": {
+                            "state": "ready",
+                            "action": "merge-matching-destination-accounts",
+                        }
+                    }
+                )
+            )
+            sql, summary = build_user_state_stage(directory)
+
+        self.assertIn("DELETE FROM `user_note`;", sql)
+        self.assertIn("DELETE FROM `user_role_history`;", sql)
+        self.assertIn("DELETE FROM `banned`;", sql)
+        self.assertIn("DELETE FROM `ban_history`;", sql)
+        self.assertTrue(summary["replaced_destination_user_state"])

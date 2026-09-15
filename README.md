@@ -287,6 +287,13 @@ writes all account changes in one UTC database transaction, and verifies the
 imported UIDs. It records completion in `import-journal.json` and refuses to
 repeat a completed account stage.
 
+When existing destination accounts are matched to source accounts, the later
+user-state stage replaces destination notes, role history, active bans, and ban
+history with the exported source state. This prevents technical history-ID
+collisions and avoids mixing temporary pre-migration state with source history.
+Passwords, MFA enrollment, and authentication connections are not part of
+these history tables and remain preserved.
+
 Do not restart the destination Hub after this command yet. The account stage
 does not import the remaining content, plugin data, economy data, or delivery
 history. Keep the writer services stopped until the remaining import stages

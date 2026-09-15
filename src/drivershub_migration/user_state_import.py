@@ -30,6 +30,29 @@ def build_user_state_stage(directory: Path) -> tuple[str, dict[str, object]]:
     profiles = _records(directory, "profiles")
     bans = _records(directory, "bans")
     statements = ["SET time_zone = '+00:00';", "START TRANSACTION;"]
+    replaced_destination_state = False
+    try:
+        preflight = json.loads(
+            (directory / "target-preflight.json").read_text(encoding="utf-8")
+        )
+    except FileNotFoundError:
+        preflight = {}
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("Unable to read destination preflight") from exc
+    resolution = preflight.get("bootstrap") if isinstance(preflight, dict) else None
+    if (
+        isinstance(resolution, dict)
+        and resolution.get("action") == "merge-matching-destination-accounts"
+    ):
+        statements.extend(
+            [
+                "DELETE FROM `user_note`;",
+                "DELETE FROM `user_role_history`;",
+                "DELETE FROM `banned`;",
+                "DELETE FROM `ban_history`;",
+            ]
+        )
+        replaced_destination_state = True
     role_histories = ban_histories = global_notes = personal_notes_skipped = 0
     for profile in profiles:
         uid = _integer(profile.get("uid"), "uid")
@@ -68,4 +91,4 @@ def build_user_state_stage(directory: Path) -> tuple[str, dict[str, object]]:
         values = [_integer(row.get("uid"), "ban uid", optional=True), row.get("email") if isinstance(row.get("email"), str) else None, _integer(row.get("discordid"), "ban discordid", optional=True), _integer(row.get("steamid"), "ban steamid", optional=True), _integer(row.get("truckersmpid"), "ban truckersmpid", optional=True), _integer(row.get("expire_timestamp"), "ban expire_timestamp"), row.get("reason") if isinstance(row.get("reason"), str) else ""]
         statements.append("INSERT INTO `banned` (`uid`,`email`,`discordid`,`steamid`,`truckersmpid`,`expire_timestamp`,`reason`) VALUES (" + ",".join(_sql_value(value) for value in values) + ");")
     statements.append("COMMIT;")
-    return "\n".join(statements) + "\n", {"state": "ready", "global_notes": global_notes, "personal_notes_skipped": personal_notes_skipped, "role_history_records": role_histories, "active_bans": len(bans), "ban_history_records": ban_histories, "database_time_zone": "+00:00"}
+    return "\n".join(statements) + "\n", {"state": "ready", "global_notes": global_notes, "personal_notes_skipped": personal_notes_skipped, "role_history_records": role_histories, "active_bans": len(bans), "ban_history_records": ban_histories, "replaced_destination_user_state": replaced_destination_state, "database_time_zone": "+00:00"}
