@@ -11,7 +11,6 @@ import subprocess
 import time
 from typing import Callable
 from urllib.parse import urlencode
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .account_import import _sql_value
 from .delivery_import import DETAIL_MARKER, exported_detail, placeholder_detail, _compressed_text
@@ -202,21 +201,54 @@ def _source_bounds(directory: Path) -> tuple[int, int]:
     return max(0, min(timestamps) - 86400), end
 
 
-def _csv_timestamp(value: str, zone: ZoneInfo) -> int | None:
-    """Convert an offset-free local time only when it identifies one instant."""
-    naive = datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
-    candidates = set()
-    for fold in (0, 1):
-        aware = naive.replace(tzinfo=zone, fold=fold)
-        timestamp = int(aware.timestamp())
-        if datetime.fromtimestamp(timestamp, zone).replace(tzinfo=None) == naive:
-            candidates.add(timestamp)
-    return next(iter(candidates)) if len(candidates) == 1 else None
+def _source_offsets(directory: Path) -> dict[str, int]:
+    """Derive source-local UTC offsets from two representations of deliveries."""
+    deliveries = json.loads(
+        (directory / "normalized" / "deliveries.json").read_text(encoding="utf-8")
+    ).get("records", [])
+    csv_deliveries = json.loads(
+        (directory / "normalized" / "deliveries-csv.json").read_text(encoding="utf-8")
+    ).get("records", [])
+    unix_by_logid = {
+        int(row["logid"]): row["timestamp"]
+        for row in deliveries
+        if isinstance(row, dict)
+        and isinstance(row.get("logid"), int)
+        and isinstance(row.get("timestamp"), int)
+    }
+    candidates: dict[str, set[int]] = {}
+    for row in csv_deliveries:
+        if not isinstance(row, dict):
+            continue
+        try:
+            logid = int(row["logid"])
+            local = datetime.strptime(row[" time_submitted"], "%Y-%m-%d %H:%M:%S")
+            timestamp = unix_by_logid[logid]
+        except (KeyError, TypeError, ValueError):
+            continue
+        local_as_utc = int(local.replace(tzinfo=timezone.utc).timestamp())
+        offset = local_as_utc - timestamp
+        # Real civil offsets stay within this range and use 15-minute units.
+        if -14 * 3600 <= offset <= 14 * 3600 and offset % 900 == 0:
+            candidates.setdefault(local.date().isoformat(), set()).add(offset)
+    return {
+        date: next(iter(offsets))
+        for date, offsets in candidates.items()
+        if len(offsets) == 1
+    }
+
+
+def _csv_timestamp(value: str, offsets: dict[str, int]) -> int | None:
+    local = datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+    offset = offsets.get(local.date().isoformat())
+    if offset is None:
+        return None
+    return int(local.replace(tzinfo=timezone.utc).timestamp()) - offset
 
 
 def enrich_economy_transactions(
     directory: Path, target_directory: Path | None, *, source: str, token: str,
-    source_timezone: str, mode: str, database: dict[str, object], approved: bool,
+    mode: str, database: dict[str, object], approved: bool,
     limit: int | None = None,
     progress: Callable[[str], None] | None = None,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
@@ -224,10 +256,9 @@ def enrich_economy_transactions(
     if not approved:
         raise ValueError("Economy enrichment requires --approve")
     _import_complete(directory, "economy")
-    try:
-        zone = ZoneInfo(source_timezone)
-    except ZoneInfoNotFoundError as exc:
-        raise ValueError("DRIVERSHUB_SOURCE_TIMEZONE is not a valid IANA time zone") from exc
+    offsets = _source_offsets(directory)
+    if not offsets:
+        raise ValueError("Unable to derive source time offsets from the delivery exports")
     initial_pending = int(query_rows(
         f"SELECT COUNT(*) FROM economy_transaction WHERE note={_sql_value(ECONOMY_MARKER)};",
         target_directory, mode=mode, database=database, runner=runner,
@@ -289,7 +320,7 @@ def enrich_economy_transactions(
                 if txid in seen:
                     continue
                 seen.add(txid)
-                timestamp = _csv_timestamp(row["time"], zone)
+                timestamp = _csv_timestamp(row["time"], offsets)
                 if timestamp is None:
                     ambiguous += 1
                     continue

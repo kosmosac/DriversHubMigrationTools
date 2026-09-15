@@ -500,11 +500,12 @@ Economy transaction timestamps can be restored from the source CSV exports:
 .venv/bin/drivershub-migrate enrich-economy-transactions --approve
 ```
 
-Set `DRIVERSHUB_SOURCE_TIMEZONE` to the IANA time zone used by the source
-server, for example `Europe/Berlin`. The CSV contains local timestamps without
-an offset, and choosing the wrong zone would write incorrect Unix timestamps.
-Timestamps in a repeated or nonexistent daylight-saving transition are left
-unchanged because the CSV cannot identify a unique instant.
+The transaction CSV contains local timestamps without a UTC offset. The tool
+derives the source server's offset automatically by matching each delivery's
+local `time_submitted` value from the delivery CSV with its Unix timestamp from
+the delivery list. Dates without an unambiguous delivery reference are not
+guessed and their transaction timestamps remain unavailable.
+
 The source endpoint allows only three requests per minute, so this job waits at
 least 20.5 seconds between requests and can take a long time. It also requires
 many requests for a Hub with numerous accounts and a long history. The source

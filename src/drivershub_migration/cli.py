@@ -322,12 +322,9 @@ def main(argv: list[str] | None = None) -> int:
                         limit=args.limit, progress=progress,
                     )
                 else:
-                    source_timezone = setting("DRIVERSHUB_SOURCE_TIMEZONE")
-                    if not source_timezone:
-                        raise ValueError("Set DRIVERSHUB_SOURCE_TIMEZONE to the source server's IANA time zone")
                     report = enrich_economy_transactions(
                         Path(output_value), Path(target_value) if target_value else None,
-                        source=source, token=token, source_timezone=source_timezone,
+                        source=source, token=token,
                         mode=target_mode, database=database, approved=args.approve,
                         limit=args.limit, progress=progress,
                     )

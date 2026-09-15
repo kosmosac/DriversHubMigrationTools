@@ -6,10 +6,10 @@ from unittest.mock import patch
 
 from drivershub_migration.enrichment import (
     _csv_timestamp,
+    _source_offsets,
     backfill_delivery_details,
     enrich_economy_transactions,
 )
-from zoneinfo import ZoneInfo
 from drivershub_migration.http import Response
 
 
@@ -51,12 +51,24 @@ def import_journal(directory, stage):
 
 
 class EnrichmentTests(unittest.TestCase):
-    def test_rejects_ambiguous_offset_free_timestamp(self):
-        self.assertIsNone(_csv_timestamp("2024-10-27 02:30:00", ZoneInfo("Europe/Berlin")))
-        self.assertEqual(
-            _csv_timestamp("2024-10-27 03:30:00", ZoneInfo("Europe/Berlin")),
-            1729996200,
-        )
+    def test_derives_only_unambiguous_daily_source_offsets(self):
+        with TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            normalized = directory / "normalized"
+            normalized.mkdir()
+            (normalized / "deliveries.json").write_text(json.dumps({"records": [
+                {"logid": 1, "timestamp": 1704067200},
+                {"logid": 2, "timestamp": 1704070800},
+            ]}))
+            (normalized / "deliveries-csv.json").write_text(json.dumps({"records": [
+                {"logid": "1", " time_submitted": "2024-01-01 01:00:00"},
+                {"logid": "2", " time_submitted": "2024-01-01 02:00:00"},
+            ]}))
+            self.assertEqual(_source_offsets(directory), {"2024-01-01": 3600})
+
+    def test_converts_timestamp_with_derived_daily_offset(self):
+        self.assertIsNone(_csv_timestamp("2024-10-27 02:30:00", {}))
+        self.assertEqual(_csv_timestamp("2024-10-27 03:30:00", {"2024-10-27": 3600}), 1729996200)
 
     def test_delivery_backfill_writes_only_conditionally_and_clears_marker(self):
         with TemporaryDirectory() as temporary:
@@ -89,7 +101,8 @@ class EnrichmentTests(unittest.TestCase):
             normalized = directory / "normalized"
             normalized.mkdir()
             (normalized / "economy-balances.json").write_text(json.dumps({"records": [{"userid": 1}]}))
-            (normalized / "deliveries.json").write_text(json.dumps({"records": [{"timestamp": 1711843200}]}))
+            (normalized / "deliveries.json").write_text(json.dumps({"records": [{"logid": 1, "timestamp": 1711843200}]}))
+            (normalized / "deliveries-csv.json").write_text(json.dumps({"records": [{"logid": "1", " time_submitted": "2024-03-31 01:00:00"}]}))
             (directory / "export.json").write_text(json.dumps({"created_at": "2024-04-02T00:00:00+00:00"}))
             sql = []
             pending = iter([[['1']], [['0']]])
@@ -100,11 +113,11 @@ class EnrichmentTests(unittest.TestCase):
             ):
                 report = enrich_economy_transactions(
                     directory, Path("/target"), source="https://source/api", token="token",
-                    source_timezone="Europe/Berlin", mode="aio", database={}, approved=True,
+                    mode="aio", database={}, approved=True,
                     limit=1,
                 )
             self.assertEqual(report["attempted_windows"], 1)
-            self.assertIn("UPDATE economy_transaction SET timestamp=1711848600", sql[0])
+            self.assertIn("UPDATE economy_transaction SET timestamp=1711852200", sql[0])
             self.assertIn("WHERE txid=9 AND note=", sql[0])
 
 
