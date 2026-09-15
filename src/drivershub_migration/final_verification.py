@@ -61,6 +61,7 @@ COUNT_QUERIES = {
 }
 
 INTEGRITY_QUERIES = {
+    "empty_migration_delivery_details": "SELECT COUNT(*) FROM `dlog` d JOIN `dlog_meta` m ON m.`logid`=d.`logid` WHERE d.`data`='' AND m.`note`='migration-import/pending-detail-enrichment'",
     "deliveries_without_metadata": "SELECT COUNT(*) FROM `dlog` d LEFT JOIN `dlog_meta` m ON m.`logid`=d.`logid` WHERE m.`logid` IS NULL",
     "metadata_without_delivery": "SELECT COUNT(*) FROM `dlog_meta` m LEFT JOIN `dlog` d ON d.`logid`=m.`logid` WHERE d.`logid` IS NULL",
     "challenge_links_without_delivery": "SELECT COUNT(*) FROM `challenge_record` r LEFT JOIN `dlog` d ON d.`logid`=r.`logid` WHERE d.`logid` IS NULL",

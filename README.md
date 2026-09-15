@@ -377,9 +377,10 @@ Import the delivery rows with verified Unix timestamps next:
 
 The list API is the authoritative baseline when the independently collected
 CSV snapshot differs. Core delivery values and list metadata are preserved.
-The raw detail payload remains empty and `dlog_meta.note` contains
-`migration-import/pending-detail-enrichment`, allowing optional detail
-backfill to identify and safely replace placeholders later.
+The detail payload contains a recognizable, frontend-renderable placeholder and
+`dlog_meta.note` contains `migration-import/pending-detail-enrichment`. This
+keeps delivery pages usable while allowing optional detail backfill to identify
+and safely replace placeholders later.
 
 ## Import dependent relationships
 

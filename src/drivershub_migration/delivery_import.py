@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from base64 import b64encode
+import json
 from pathlib import Path
 
 from .account_import import _integer, _sql_value
@@ -10,6 +12,64 @@ from .content_import import _records, _timestamp
 
 TRACKER_TYPES = {"tracksim": 2, "trucky": 3, "custom": 4, "unitracker": 5}
 DETAIL_MARKER = "migration-import/pending-detail-enrichment"
+
+
+def placeholder_detail(*, delivered: bool, ats: bool) -> str:
+    """Return a backend-compatible, frontend-renderable placeholder payload."""
+    try:
+        import zstandard
+    except ImportError as exc:
+        raise ValueError("Install project dependencies to build delivery placeholders") from exc
+    event_type = "job.delivered" if delivered else "job.cancelled"
+    unavailable = {"name": "Migration data unavailable", "unique_id": "migration-placeholder"}
+    detail = {
+        "object": "event",
+        "type": event_type,
+        "data": {"object": {
+            "driver": {},
+            "events": [{
+                "type": event_type,
+                "real_time": "1970-01-01T00:00:00Z",
+                "meta": {"distance": 0, "revenue": 0, "autoParked": False},
+            }],
+            "game": {
+                "short_name": "ats" if ats else "eut2",
+                "had_police_enabled": False,
+            },
+            "start_time": "1970-01-01T00:00:00Z",
+            "stop_time": "1970-01-01T00:00:00Z",
+            "source_city": unavailable,
+            "source_company": unavailable,
+            "destination_city": unavailable,
+            "destination_company": unavailable,
+            "cargo": {**unavailable, "mass": 0, "damage": 0},
+            "truck": {
+                "brand": {"name": "Migration placeholder"},
+                "name": "Details unavailable",
+                "unique_id": "migration-placeholder",
+                "license_plate_country": None,
+                "license_plate": "N/A",
+                "initial_odometer": 0,
+                "odometer": 0,
+                "top_speed": 0,
+                "average_speed": 0,
+            },
+            "trailers": [{
+                "brand": None, "name": "Migration data unavailable",
+                "license_plate_country": None, "license_plate": "N/A",
+            }],
+            "planned_distance": 0,
+            "driven_distance": 0,
+            "fuel_used": 0,
+            "adblue_used": 0,
+            "is_special": False,
+            "is_late": False,
+            "market": "freight_market",
+            "multiplayer": None,
+        }},
+    }
+    raw = json.dumps(detail, separators=(",", ":")).encode()
+    return b64encode(zstandard.ZstdCompressor().compress(raw)).decode()
 
 
 def _optional_integer(value: object) -> int | None:
@@ -47,10 +107,11 @@ def build_delivery_stage(directory: Path) -> tuple[str, dict[str, object]]:
         else:
             trackerid = _optional_integer(csv.get(" trackerid"))
             tracker_type = TRACKER_TYPES.get(str(csv.get(" tracker", "")).lower(), 0)
+        status = _integer(row.get("status"), "delivery status")
         values = [
-            logid, userid, "", row.get("max_speed"),
+            logid, userid, placeholder_detail(delivered=status == 1, ats=_integer(row.get("unit"), "delivery unit") == 2), row.get("max_speed"),
             _timestamp(row.get("timestamp"), "delivery timestamp"),
-            _integer(row.get("status"), "delivery status"), row.get("profit"),
+            status, row.get("profit"),
             _integer(row.get("unit"), "delivery unit"), row.get("fuel"),
             row.get("distance"), trackerid, tracker_type,
             _integer(row.get("views"), "delivery views"),

@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from drivershub_migration.delivery_import import build_delivery_stage
 
@@ -16,7 +17,12 @@ class DeliveryImportTests(unittest.TestCase):
             csv = {"logid": "1", " trackerid": "9", " tracker": "tracksim"}
             (normalized / "deliveries.json").write_text(json.dumps({"records": [delivery]}))
             (normalized / "deliveries-csv.json").write_text(json.dumps({"records": [csv, csv]}))
-            sql, summary = build_delivery_stage(directory)
+            class Compressor:
+                def compress(self, value):
+                    return b"compressed:" + value
+
+            with patch.dict("sys.modules", {"zstandard": type("Zstd", (), {"ZstdCompressor": Compressor})}):
+                sql, summary = build_delivery_stage(directory)
         self.assertIn("INSERT INTO `dlog`", sql)
         self.assertIn("INSERT INTO `dlog_meta`", sql)
         self.assertIn("1700000000", sql)
