@@ -381,6 +381,22 @@ The raw detail payload remains empty and `dlog_meta.note` contains
 `migration-import/pending-detail-enrichment`, allowing optional detail
 backfill to identify and safely replace placeholders later.
 
+## Import dependent relationships
+
+After deliveries exist, restore their exported relationships:
+
+```bash
+.venv/bin/drivershub-migrate import-relationships \
+  --approve \
+  --backup-confirmed
+```
+
+This restores challenge delivery records, challenge completions, and pending
+division requests. Every referenced delivery must exist in the baseline
+import. Where the source API omits a relationship timestamp, the referenced
+delivery's verified Unix timestamp is used; pending division requests remain
+explicitly unprocessed.
+
 ## Development
 
 Run the test suite with the Python standard library:
