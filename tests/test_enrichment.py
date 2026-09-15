@@ -19,8 +19,10 @@ class Compressor:
 
 
 class DetailClient:
+    authorizations = []
+
     def __init__(self, *args, **kwargs):
-        pass
+        self.authorizations.append(args[0])
 
     def get(self, url, expect_json=True):
         body = json.dumps({
@@ -89,6 +91,7 @@ class EnrichmentTests(unittest.TestCase):
                 )
             self.assertEqual(report["state"], "complete")
             self.assertEqual(report["completed"], 1)
+            self.assertEqual(DetailClient.authorizations[-1], "Application token")
             self.assertIn("@migration_eligible", sql[0])
             self.assertIn("JOIN dlog_meta", sql[0])
             self.assertIn("AND d.data=", sql[0])

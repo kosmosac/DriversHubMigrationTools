@@ -86,7 +86,11 @@ def backfill_delivery_details(
         target_directory, mode=mode, database=database, runner=runner,
     )
     journal = WorkJournal(directory / "enrichment" / "deliveries")
-    client = HttpClient(token, minimum_interval=request_interval, progress=progress)
+    client = HttpClient(
+        f"Application {token}",
+        minimum_interval=request_interval,
+        progress=progress,
+    )
     if progress:
         suffix = f" (limited to {limit} requests)" if limit is not None else ""
         progress(f"Delivery backfill found {len(rows)} marked placeholders{suffix}")
@@ -163,9 +167,17 @@ def backfill_delivery_details(
                     f"AND d.data={_sql_value(expected)};\n",
                     target_directory, mode=mode, database=database, runner=runner,
                 )
-            journal.record(key, {"state": state, "logid": logid, "attempts": attempts, "url": url, "error": str(exc)})
+            journal.record(key, {
+                "state": state, "logid": logid, "attempts": attempts,
+                "url": url, "status": response.status if response else None,
+                "error": str(exc),
+            })
             unavailable += state == "unavailable"
             failed += state == "failed"
+            if response is not None and response.status in {401, 403}:
+                raise ValueError(
+                    f"The source rejected the application token with HTTP {response.status}"
+                ) from exc
         progress_state.advance()
     remaining = int(query_rows(
         f"SELECT COUNT(*) FROM dlog_meta WHERE note={_sql_value(DETAIL_MARKER)};",
@@ -284,7 +296,9 @@ def enrich_economy_transactions(
         windows.extend((userid, cursor, before) for userid in userids)
         cursor = before + 1
     journal = WorkJournal(directory / "enrichment" / "economy")
-    client = HttpClient(token, minimum_interval=20.5, progress=progress)
+    client = HttpClient(
+        f"Application {token}", minimum_interval=20.5, progress=progress
+    )
     pending_windows = [
         window for window in windows
         if not journal.completed(f"economy/{window[0]}/{window[1]}-{window[2]}")
@@ -338,8 +352,18 @@ def enrich_economy_transactions(
             completed_windows += 1
             updated += len(seen)
         except (RequestFailed, ValueError, KeyError, UnicodeDecodeError) as exc:
-            journal.record(key, {"state": "failed", "userid": userid, "after": after, "before": before, "attempts": attempts, "url": url, "error": str(exc)})
+            response = exc.response if isinstance(exc, RequestFailed) else None
+            journal.record(key, {
+                "state": "failed", "userid": userid, "after": after,
+                "before": before, "attempts": attempts, "url": url,
+                "status": response.status if response else None,
+                "error": str(exc),
+            })
             failed += 1
+            if response is not None and response.status in {401, 403}:
+                raise ValueError(
+                    f"The source rejected the application token with HTTP {response.status}"
+                ) from exc
         progress_state.advance()
         if progress:
             current_pending = int(query_rows(
