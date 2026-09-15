@@ -148,21 +148,28 @@ export entries are failed, incomplete, or inconsistent. `manifest_states`
 summarizes all recorded states. The command exits with a nonzero status when
 the integrity is invalid or the export is incomplete.
 
-## Plan destination identities
+## Plan the destination import
 
-Create the identity and account-claim plan before any destination data is
-written:
+Create the configuration, branding, identity, and account-claim plan before
+any destination data is written:
 
 ```bash
 .venv/bin/drivershub-migrate plan-import
 ```
 
-The command preserves each source `uid` and `userid` in its proposed target
-mapping. Imported Steam and Discord IDs let users claim their existing account
-by signing in again through the corresponding provider. An imported email
-address provides a third claim method through the normal password-reset flow
-when SMTP is configured. Passwords, MFA secrets, and sessions are not imported,
-and users must enroll in MFA again.
+The plan separates portable backend values from protected values that the
+source API does not return. Empty protected values never replace destination
+secrets. Portable frontend branding settings are kept, while the frontend
+domain, API URL, plugin list, abbreviation, and generated asset keys are
+derived from the destination backend during import. Available logo, banner,
+and background files are included in the plan.
+
+The command also preserves each source `uid` and `userid` in its proposed
+target mapping. Imported Steam and Discord IDs let users claim their existing
+account by signing in again through the corresponding provider. An imported
+email address provides a third claim method through the normal password-reset
+flow when SMTP is configured. Passwords, MFA secrets, and sessions are not
+imported, and users must enroll in MFA again.
 
 The command writes `import-plan.json` and stops with a nonzero status when it
 finds duplicate internal IDs, Steam IDs, Discord IDs, or email addresses.

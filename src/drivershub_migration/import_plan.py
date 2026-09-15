@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .configuration_plan import create_configuration_plan
 from .storage import write_json
 from .verify import verify_export
 
@@ -100,11 +101,13 @@ def create_import_plan(directory: Path) -> dict[str, object]:
             }
         )
 
+    configuration = create_configuration_plan(directory)
     plan = {
         "format_version": 1,
         "state": "blocked" if conflicts else "complete",
         "identity_policy": "preserve-source-ids",
         "claim_policy": "steam-discord-or-email",
+        "configuration": configuration,
         "accounts": sorted(accounts, key=lambda account: account["source_uid"]),
         "summary": {
             "accounts": len(accounts),

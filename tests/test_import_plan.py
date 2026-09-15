@@ -16,8 +16,10 @@ class ImportPlanTests(unittest.TestCase):
         )
 
     @patch("drivershub_migration.import_plan.verify_export")
-    def test_creates_claim_plan_and_allows_repeated_pending_userid(self, verify):
+    @patch("drivershub_migration.import_plan.create_configuration_plan")
+    def test_creates_claim_plan_and_allows_repeated_pending_userid(self, configuration, verify):
         verify.return_value = {"integrity": "valid", "export": "complete"}
+        configuration.return_value = {"state": "complete"}
         with TemporaryDirectory() as temporary:
             directory = Path(temporary)
             self._write_profiles(
@@ -38,8 +40,10 @@ class ImportPlanTests(unittest.TestCase):
             self.assertEqual(result["accounts"][2]["claim_methods"], ["email"])
 
     @patch("drivershub_migration.import_plan.verify_export")
-    def test_blocks_duplicate_claim_identity(self, verify):
+    @patch("drivershub_migration.import_plan.create_configuration_plan")
+    def test_blocks_duplicate_claim_identity(self, configuration, verify):
         verify.return_value = {"integrity": "valid", "export": "complete"}
+        configuration.return_value = {"state": "complete"}
         with TemporaryDirectory() as temporary:
             directory = Path(temporary)
             self._write_profiles(
@@ -54,8 +58,10 @@ class ImportPlanTests(unittest.TestCase):
             self.assertEqual(result["conflicts"][0]["field"], "steamid")
 
     @patch("drivershub_migration.import_plan.verify_export")
-    def test_blocks_duplicate_email_case_insensitively(self, verify):
+    @patch("drivershub_migration.import_plan.create_configuration_plan")
+    def test_blocks_duplicate_email_case_insensitively(self, configuration, verify):
         verify.return_value = {"integrity": "valid", "export": "complete"}
+        configuration.return_value = {"state": "complete"}
         with TemporaryDirectory() as temporary:
             directory = Path(temporary)
             self._write_profiles(
