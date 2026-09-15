@@ -308,6 +308,21 @@ Personal administrator notes cannot be attributed safely because the source
 API does not identify their author; the command reports and skips them.
 Sessions, MFA enrolments, and transient activity records are not imported.
 
+## Import content
+
+Import the self-contained content resources while the destination writers
+remain stopped:
+
+```bash
+.venv/bin/drivershub-migrate import-content \
+  --approve \
+  --backup-confirmed
+```
+
+This stage currently imports announcements and downloads, retaining their
+original IDs, authors, timestamps, ordering, visibility, and counters. Other
+plugin resources, economy data, and deliveries are handled by later stages.
+
 ## Development
 
 Run the test suite with the Python standard library:

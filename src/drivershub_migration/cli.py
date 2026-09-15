@@ -11,6 +11,7 @@ import sys
 from .assess import assess
 from .account_writer import import_accounts
 from .configuration_writer import import_configuration
+from .content_writer import import_content
 from .user_state_writer import import_user_state
 from .env import read_env
 from .exporter import export_source
@@ -127,6 +128,14 @@ def parser() -> argparse.ArgumentParser:
     user_state_command.add_argument("--approve", action="store_true")
     user_state_command.add_argument("--backup-confirmed", action="store_true")
     user_state_command.add_argument("--writers-stopped", action="store_true")
+    content_command = commands.add_parser(
+        "import-content", help="Import self-contained Hub content"
+    )
+    content_command.add_argument("--output", type=Path)
+    content_command.add_argument("--target", type=Path)
+    content_command.add_argument("--approve", action="store_true")
+    content_command.add_argument("--backup-confirmed", action="store_true")
+    content_command.add_argument("--writers-stopped", action="store_true")
     dry_run_command.add_argument(
         "--target",
         type=Path,
@@ -189,6 +198,7 @@ def main(argv: list[str] | None = None) -> int:
         "import-accounts",
         "import-configuration",
         "import-user-state",
+        "import-content",
     }:
         output_value = args.output or setting("DRIVERSHUB_MIGRATION_DIRECTORY")
         target_mode = (setting("DRIVERSHUB_TARGET_MODE") or "aio").lower()
@@ -256,6 +266,22 @@ def main(argv: list[str] | None = None) -> int:
                     backup_confirmed=args.backup_confirmed,
                     writers_stopped=args.writers_stopped,
                 )
+            elif args.command == "import-content":
+                report = import_content(
+                    Path(output_value), Path(target_value) if target_value else None,
+                    mode=target_mode,
+                    database={
+                        "host": setting("DRIVERSHUB_TARGET_DB_HOST"),
+                        "port": setting("DRIVERSHUB_TARGET_DB_PORT"),
+                        "user": setting("DRIVERSHUB_TARGET_DB_USER"),
+                        "password": setting("DRIVERSHUB_TARGET_DB_PASSWORD"),
+                        "database": setting("DRIVERSHUB_TARGET_DB_NAME"),
+                        "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET"),
+                    },
+                    approved=args.approve,
+                    backup_confirmed=args.backup_confirmed,
+                    writers_stopped=args.writers_stopped,
+                )
             else:
                 function = preflight_target if args.command == "preflight-target" else create_import_dry_run
                 report = function(
@@ -294,6 +320,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Active bans: {report.get('active_bans', 0)}")
             print(f"Ban-history records: {report.get('ban_history_records', 0)}")
             print(f"Personal administrator notes skipped: {report.get('personal_notes_skipped', 0)}")
+            print("Next: keep destination writer services stopped for the remaining import stages.")
+            return 0
+        if args.command == "import-content":
+            print("Content import complete.")
+            for name, count in report.get("resources", {}).items():
+                print(f"{name.replace('_', ' ').title()}: {count}")
             print("Next: keep destination writer services stopped for the remaining import stages.")
             return 0
         print(
