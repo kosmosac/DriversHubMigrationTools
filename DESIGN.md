@@ -531,6 +531,16 @@ CSV export and delivery list. It must work when no delivery details were
 exported. This preserves the operational delivery history and the database
 columns used by delivery lists, basic totals, rankings, and leaderboards.
 
+Hub timestamps are Unix seconds and must be copied as numeric values without a
+local-time conversion. The delivery timestamp comes from the normalized
+delivery-list response. The CSV `time_submitted` column is display-only: the
+upstream exporter formats it in the source server's local time and does not
+include a UTC offset. An importer must never parse that value as local time on
+the destination. Tracker `start_time` and `stop_time` strings inside an
+exported payload are preserved verbatim. A writing import must reject an
+unexpected timestamp type instead of inferring a time zone. Database sessions
+used for migration writes must explicitly use UTC.
+
 When optional delivery details exist, a separate import stage can additionally
 restore the exposed tracker payload in `dlog.data` and route data in
 `telemetry`. This improves historical detail pages and permits more detailed

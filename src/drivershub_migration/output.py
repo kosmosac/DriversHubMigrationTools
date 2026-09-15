@@ -134,6 +134,11 @@ def render_import_dry_run(report: dict[str, object], directory: Path) -> str:
     plugins = stages.get("plugin_resources", {}) if isinstance(stages, dict) else {}
     economy = stages.get("economy", {}) if isinstance(stages, dict) else {}
     deliveries = stages.get("deliveries", {}) if isinstance(stages, dict) else {}
+    timestamp_policy = (
+        deliveries.get("timestamp_policy", {})
+        if isinstance(deliveries, dict)
+        else {}
+    )
     ready = report.get("state") == "ready"
     lines = [
         "Import dry run " + ("ready." if ready else "blocked."),
@@ -148,6 +153,13 @@ def render_import_dry_run(report: dict[str, object], directory: Path) -> str:
         _line("Economy resource groups", len(economy) if isinstance(economy, dict) else 0),
         _line("Deliveries", deliveries.get("baseline_items", 0)),
         _line("Deliveries using placeholders", deliveries.get("placeholder_items", 0)),
+        _line(
+            "Delivery timestamps",
+            "verified Unix seconds"
+            if isinstance(timestamp_policy, dict)
+            and timestamp_policy.get("state") == "ready"
+            else "not verified",
+        ),
     ]
     bootstrap = report.get("bootstrap", {})
     if isinstance(bootstrap, dict):

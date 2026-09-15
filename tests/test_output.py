@@ -25,7 +25,11 @@ class HumanOutputTests(unittest.TestCase):
                     "core_resources": {"profiles": 3},
                     "plugin_resources": {},
                     "economy": {},
-                    "deliveries": {"baseline_items": 10, "placeholder_items": 10},
+                    "deliveries": {
+                        "baseline_items": 10,
+                        "placeholder_items": 10,
+                        "timestamp_policy": {"state": "ready"},
+                    },
                 },
             },
             Path("migrations/example"),
@@ -33,6 +37,7 @@ class HumanOutputTests(unittest.TestCase):
         self.assertIn("Import dry run ready.", text)
         self.assertIn("Target modified: no", text)
         self.assertIn("Deliveries using placeholders: 10", text)
+        self.assertIn("Delivery timestamps: verified Unix seconds", text)
 
     def test_verification_includes_result_and_next_step(self):
         text = render_verification(
