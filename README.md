@@ -197,9 +197,12 @@ modifying them:
 The AIO adapter reads MariaDB through `docker compose exec`. The generic adapter
 connects directly to MariaDB. Both write the same `target-preflight.json` and
 use the same migration rules. Neither assumes fixed IDs for the destination
-administrator. Every existing destination account is reported for an explicit
-preserve-or-merge decision. Source `uid` and `userid` values remain unchanged
-in either case.
+administrator. If the only destination account matches exactly one imported
+administrator by email, Discord ID, or Steam ID, the report proposes a merge.
+If no source administrator matches, it proposes new collision-free IDs that
+retain the bootstrap account as an accessible recovery administrator. Multiple
+destination accounts and ambiguous identity matches require a manual decision.
+No account is changed by this command.
 
 ## Development
 

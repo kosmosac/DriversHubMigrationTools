@@ -39,6 +39,15 @@ def create_import_plan(directory: Path) -> dict[str, object]:
     if verification["integrity"] != "valid" or verification["export"] != "complete":
         raise ValueError("The migration directory did not pass verification")
 
+    configuration = create_configuration_plan(directory)
+    backend_portable = configuration.get("backend", {}).get("portable", {})
+    permissions = backend_portable.get("perms", {}) if isinstance(backend_portable, dict) else {}
+    administrator_roles = {
+        identifier
+        for value in permissions.get("administrator", [])
+        if (identifier := _identifier(value)) is not None
+    } if isinstance(permissions, dict) else set()
+
     profiles_path = directory / "normalized" / "profiles.json"
     try:
         document = json.loads(profiles_path.read_text(encoding="utf-8"))
@@ -97,6 +106,12 @@ def create_import_plan(directory: Path) -> dict[str, object]:
             claim_methods.append("discord")
         if email is not None:
             claim_methods.append("email")
+        roles = profile.get("roles")
+        role_ids = (
+            [identifier for value in roles if (identifier := _identifier(value)) is not None]
+            if isinstance(roles, list)
+            else []
+        )
         accounts.append(
             {
                 "source_uid": uid,
@@ -109,13 +124,14 @@ def create_import_plan(directory: Path) -> dict[str, object]:
                 "discordid": discordid,
                 "truckersmpid": truckersmpid,
                 "email": email,
+                "roles": role_ids,
+                "is_administrator": bool(administrator_roles.intersection(role_ids)),
                 "password": "not-imported",
                 "mfa": "enroll-again",
                 "state": "claimable" if claim_methods else "manual-recovery-required",
             }
         )
 
-    configuration = create_configuration_plan(directory)
     plan = {
         "format_version": 1,
         "state": "blocked" if conflicts else "complete",
@@ -125,6 +141,7 @@ def create_import_plan(directory: Path) -> dict[str, object]:
         "accounts": sorted(accounts, key=lambda account: account["source_uid"]),
         "summary": {
             "accounts": len(accounts),
+            "administrators": sum(account["is_administrator"] for account in accounts),
             "claimable": sum(account["state"] == "claimable" for account in accounts),
             "manual_recovery_required": sum(
                 account["state"] == "manual-recovery-required" for account in accounts

@@ -466,6 +466,30 @@ any internal ID collision. Names, avatars, and TruckersMP IDs must never be used
 on their own to claim an account. Email claim requires successful delivery and
 use of the destination Hub's time-limited password-reset link.
 
+### Bootstrap administrator handling
+
+The destination bootstrap administrator must not be assumed to use a specific
+`uid` or `userid`. Before account import, the tool compares it only with source
+accounts that have an administrator role according to the exported permission
+configuration.
+
+Automatic merging is permitted when the destination account matches exactly
+one source administrator by normalized email address, Discord ID, or Steam ID.
+Multiple matching fields can strengthen the same match. If different fields
+identify different source accounts, or an identifier is duplicated, the tool
+must stop for an explicit decision. Names, avatars, TruckersMP IDs, and internal
+IDs are not sufficient evidence for an automatic identity merge.
+
+If no unambiguous source administrator matches, the bootstrap administrator is
+retained as a recovery account. Before preserving source IDs, the importer
+moves its `uid` and `userid` to deterministic collision-free values and updates
+all destination references in the same transaction. Its authentication data,
+MFA configuration, and administrator roles remain intact. The import plan and
+journal record the original IDs, replacement IDs, and recovery-account state.
+The relocation logic is allowed only for a fresh destination whose bootstrap
+account and related initialization records passed preflight; it must not be
+used to rearrange an established destination.
+
 ### Import order
 
 After the empty destination is initialized and stopped, import in this order:

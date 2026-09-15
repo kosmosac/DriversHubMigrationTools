@@ -29,6 +29,79 @@ USER_COLUMNS = (
 )
 
 
+def _identity(value: object, *, email: bool = False) -> object | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if email:
+        return value.strip().lower() if isinstance(value, str) and "@" in value else None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    return None
+
+
+def _bootstrap_resolution(
+    source_accounts: list[dict[str, object]],
+    target_accounts: list[dict[str, object]],
+) -> dict[str, object]:
+    if not target_accounts:
+        return {"state": "not-required", "reason": "The destination has no account."}
+    if len(target_accounts) != 1:
+        return {
+            "state": "manual-decision-required",
+            "reason": "The destination contains more than one account.",
+        }
+
+    bootstrap = target_accounts[0]
+    matches: dict[object, set[str]] = {}
+    for source in source_accounts:
+        if not source.get("is_administrator"):
+            continue
+        for field in ("steamid", "discordid", "email"):
+            source_value = _identity(source.get(field), email=field == "email")
+            target_value = _identity(bootstrap.get(field), email=field == "email")
+            if source_value is not None and source_value == target_value:
+                matches.setdefault(source["source_uid"], set()).add(field)
+
+    if len(matches) == 1:
+        source_uid, fields = next(iter(matches.items()))
+        return {
+            "state": "ready",
+            "action": "merge-with-source-administrator",
+            "source_uid": source_uid,
+            "matched_by": sorted(fields),
+            "target_uid": bootstrap.get("uid"),
+            "target_userid": bootstrap.get("userid"),
+        }
+    if len(matches) > 1:
+        return {
+            "state": "manual-decision-required",
+            "reason": "Bootstrap identities match different source administrators.",
+            "candidate_source_uids": sorted(matches),
+        }
+
+    used_uids = {
+        value
+        for account in [*source_accounts, *target_accounts]
+        if isinstance((value := account.get("target_uid", account.get("uid"))), int)
+    }
+    used_userids = {
+        value
+        for account in [*source_accounts, *target_accounts]
+        if isinstance((value := account.get("target_userid", account.get("userid"))), int)
+        and value >= 0
+    }
+    return {
+        "state": "ready",
+        "action": "retain-as-recovery-account",
+        "original_uid": bootstrap.get("uid"),
+        "original_userid": bootstrap.get("userid"),
+        "replacement_uid": max(used_uids, default=0) + 1,
+        "replacement_userid": max(used_userids, default=0) + 1,
+    }
+
+
 def _compose_command(target: Path) -> list[str]:
     return [
         "docker",
@@ -160,8 +233,9 @@ def preflight_target(
         "source_accounts": len(source_accounts),
         "target_accounts": target_accounts,
         "collisions": collisions,
+        "bootstrap": _bootstrap_resolution(source_accounts, target_accounts),
         "required_action": (
-            "Select how each existing destination account is preserved or merged before import."
+            "Approve or change the proposed bootstrap account action before import."
             if target_accounts
             else None
         ),

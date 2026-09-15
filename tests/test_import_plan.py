@@ -19,13 +19,16 @@ class ImportPlanTests(unittest.TestCase):
     @patch("drivershub_migration.import_plan.create_configuration_plan")
     def test_creates_claim_plan_and_allows_repeated_pending_userid(self, configuration, verify):
         verify.return_value = {"integrity": "valid", "export": "complete"}
-        configuration.return_value = {"state": "complete"}
+        configuration.return_value = {
+            "state": "complete",
+            "backend": {"portable": {"perms": {"administrator": [20]}}},
+        }
         with TemporaryDirectory() as temporary:
             directory = Path(temporary)
             self._write_profiles(
                 directory,
                 [
-                    {"uid": 1, "userid": -1, "name": "One", "steamid": "123"},
+                    {"uid": 1, "userid": -1, "name": "One", "steamid": "123", "roles": [20]},
                     {"uid": 2, "userid": -1, "name": "Two", "discordid": "456"},
                     {"uid": 3, "userid": 7, "name": "Three", "email": "three@example.com"},
                     {"uid": 4, "userid": 8, "name": "Four"},
@@ -38,6 +41,8 @@ class ImportPlanTests(unittest.TestCase):
             self.assertEqual(result["summary"]["manual_recovery_required"], 1)
             self.assertEqual(result["accounts"][0]["target_uid"], 1)
             self.assertEqual(result["accounts"][0]["claim_methods"], ["steam"])
+            self.assertTrue(result["accounts"][0]["is_administrator"])
+            self.assertEqual(result["summary"]["administrators"], 1)
             self.assertEqual(result["accounts"][2]["claim_methods"], ["email"])
             self.assertIsNone(result["accounts"][4]["target_userid"])
 
