@@ -193,6 +193,32 @@ The delivery detail response includes telemetry and most of the stored tracker
 payload, but it removes the embedded driver object. The CSV export contains a
 useful normalized representation but not the complete original database row.
 
+Delivery details are an optional export and import extension. Their absence
+must not block a baseline migration. The baseline delivery import uses the CSV
+export and delivery list to preserve IDs, driver assignments, timestamps,
+status, distance, profit, fuel, maximum speed, source, destination, cargo,
+views, and exposed division and challenge relations.
+
+Without the optional detail export, historical delivery pages have reduced
+detail. Original tracker payloads, event histories, complete truck and trailer
+data, route telemetry, and statistics derived from those fields cannot be
+restored faithfully. Deliveries received by the destination after migration
+are not affected. The export and import reports must state these limitations
+without classifying the baseline migration as failed.
+
+The baseline importer must write schema-compatible placeholder detail data
+where the destination requires fields that are available only from the detail
+endpoint. These values must be deterministic, visibly identifiable as
+migration placeholders, and sufficient to keep supported delivery views and
+backend operations from failing. They must not be presented as measurements
+from the source Hub. The exact placeholder structure is version-specific and
+must be tested against every consumer of the stored delivery payload.
+
+Each placeholder delivery must also be recorded explicitly in the migration
+journal. Placeholder discovery must not depend only on comparing ordinary
+field values, because a real delivery can legitimately contain empty strings,
+zeroes, or empty collections.
+
 ### Export coverage
 
 The following table describes the expected source coverage. Exact coverage
@@ -215,7 +241,7 @@ must be measured during preflight.
 | Personal notes and personal settings | User-specific or incomplete | Mostly unavailable |
 | Role and ban history | Partly exposed through profiles | Best effort; verify pagination and limits |
 | Current bans | Administrator ban endpoints | Usually complete |
-| Deliveries | Lists and CSV export; detail endpoint has side effects | Normalized export by default; richer but side-effecting export on request |
+| Deliveries | Lists and CSV export; detail endpoint has side effects | Baseline import from list and CSV; optional richer import from delivery details |
 | Deleted deliveries | Not exposed | Unavailable |
 | Derived delivery statistics | Summary APIs only | Reports, not complete internal state |
 | Announcements | List and detail endpoints | Usually complete |
@@ -452,11 +478,13 @@ After the empty destination is initialized and stopped, import in this order:
 6. Independent content such as announcements and downloads.
 7. Events, polls, applications, tasks, and their exported relations.
 8. Challenges and their exported relations.
-9. Deliveries, telemetry, divisions, and challenge references where the
-   migration directory contains sufficient data.
-10. Economy state where a resource-specific integrity check is available.
-11. Audit and other historical records that can be mapped safely.
-12. Frontend user settings that are both exported and mappable.
+9. Baseline deliveries, divisions, and challenge references from the delivery
+   list and CSV export.
+10. Optional delivery payloads and telemetry from an existing detail export or
+    a later source backfill.
+11. Economy state where a resource-specific integrity check is available.
+12. Audit and other historical records that can be mapped safely.
+13. Frontend user settings that are both exported and mappable.
 
 Each stage must resolve all referenced IDs before writing. An unresolved
 reference must stop that object or stage; it must not silently point to a
@@ -474,10 +502,61 @@ migration method because it can:
 - reject old payload formats;
 - require tracker signatures or remote services.
 
-The importer can reconstruct core delivery and metadata rows from the CSV
-export and optional detail export. Exact reconstruction depends on the source
-fields that were available. Missing driver payloads, deleted deliveries,
-private data, and derived statistics must remain documented as gaps.
+The baseline importer reconstructs core `dlog` and `dlog_meta` rows from the
+CSV export and delivery list. It must work when no delivery details were
+exported. This preserves the operational delivery history and the database
+columns used by delivery lists, basic totals, rankings, and leaderboards.
+
+When optional delivery details exist, a separate import stage can additionally
+restore the exposed tracker payload in `dlog.data` and route data in
+`telemetry`. This improves historical detail pages and permits more detailed
+statistics to be rebuilt. When this stage is omitted, the importer writes only
+the documented schema-compatible placeholders required for safe operation. It
+must not represent placeholder events, vehicle data, or telemetry as source
+data.
+
+### Deferred delivery detail backfill
+
+The operator can run a separate backfill after the baseline migration while
+the source Hub remains reachable. This operation is optional and must not be a
+condition for putting the destination Hub into service.
+
+For each destination delivery that is explicitly marked as a migration
+placeholder, the backfill:
+
+1. requests the matching delivery detail from the source API;
+2. validates the response and its source delivery ID;
+3. converts the response for the selected destination schema;
+4. replaces the placeholder payload and telemetry in one destination database
+   transaction; and
+5. records the delivery as complete in the migration journal.
+
+The backfill must be resumable and idempotent. Its journal records at least the
+source and destination delivery IDs, state, attempt count, last error, source
+response checksum, and completion time. Supported states include `pending`,
+`in_progress`, `complete`, `failed`, and `unavailable`. After an interrupted
+run, an unfinished `in_progress` item can safely return to `pending`.
+
+The operation must use the exporter's rate limiting, retry, and checkpoint
+rules. A failed or temporarily unavailable source item must not stop unrelated
+items. Re-running the command retries unfinished items and skips completed
+items unless the operator explicitly requests verification or replacement.
+
+Before writing, the backfill must confirm that the destination still contains
+the expected placeholder recorded by the baseline import. It must refuse to
+overwrite real details, a delivery created directly on the destination, or a
+payload changed after migration. Updating the database directly is required;
+the tool must not replay tracker webhooks or trigger operational side effects.
+
+The source detail endpoint increments that delivery's view counter. The
+backfill therefore requires the same explicit operator consent as bulk detail
+export. If the source becomes permanently unavailable, the baseline delivery
+history remains usable with its clearly marked placeholder details.
+
+Exact reconstruction still depends on the source fields that were available.
+Missing driver payloads, deleted deliveries, private data, and derived
+statistics must remain documented as gaps. Failure or omission of the optional
+detail stage must not roll back an otherwise valid baseline delivery import.
 
 Statistics and dependent relations must be rebuilt or imported with explicit
 version-specific logic. They must not be guessed.
