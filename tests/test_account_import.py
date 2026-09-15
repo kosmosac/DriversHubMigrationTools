@@ -68,9 +68,8 @@ class AccountImportTests(unittest.TestCase):
         self.assertIn(
             "`join_timestamp`,`mfa_secret`,`tracker_in_use`", sql
         )
-        self.assertIn(
-            "1700000000,CONVERT(0x USING utf8mb4),2", sql
-        )
+        self.assertIn("1700000000,'',2", sql)
+        self.assertNotIn("CONVERT(0x USING utf8mb4)", sql)
         self.assertTrue(sql.endswith("COMMIT;\n"))
         self.assertEqual(summary["inserted_accounts"], 1)
 

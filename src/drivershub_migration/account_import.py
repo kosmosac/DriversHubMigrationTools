@@ -73,6 +73,8 @@ def _sql_value(value: object) -> str:
     if isinstance(value, int):
         return str(value)
     if isinstance(value, str):
+        if value == "":
+            return "''"
         return "CONVERT(0x" + value.encode("utf-8").hex() + " USING utf8mb4)"
     raise ValueError(f"Unsupported SQL value type: {type(value).__name__}")
 
