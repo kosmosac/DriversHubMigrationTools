@@ -13,6 +13,7 @@ from .storage import write_json
 REQUIRED_STAGES = (
     "accounts", "configuration", "user_state", "content", "applications",
     "events_challenges", "economy", "deliveries", "relationships",
+    "polls_tasks", "economy_inventory",
 )
 
 
@@ -35,9 +36,18 @@ def _expected_counts(journal: dict[str, object]) -> dict[str, int]:
         "economy_transactions": int(stages["economy"].get("transactions", 0)),
         "deliveries": int(stages["deliveries"].get("deliveries", 0)),
         "delivery_metadata": int(stages["deliveries"].get("deliveries", 0)),
+        "delivery_placeholders": int(stages["deliveries"].get("detail_placeholders", 0)),
+        "delivery_telemetry": int(stages["deliveries"].get("imported_telemetry", 0)),
         "challenge_links": int(stages["relationships"].get("challenge_delivery_links", 0)),
         "challenge_completions": int(stages["relationships"].get("challenge_completions", 0)),
         "pending_divisions": int(stages["relationships"].get("pending_division_requests", 0)),
+        "polls": int(stages["polls_tasks"].get("polls", 0)),
+        "poll_choices": int(stages["polls_tasks"].get("poll_choices", 0)),
+        "poll_votes": int(stages["polls_tasks"].get("poll_votes", 0)),
+        "tasks": int(stages["polls_tasks"].get("tasks", 0)),
+        "economy_trucks": int(stages["economy_inventory"].get("trucks", 0)),
+        "economy_garage_slots": int(stages["economy_inventory"].get("garage_slots", 0)),
+        "economy_merchandise": int(stages["economy_inventory"].get("merchandise", 0)),
     }
 
 
@@ -55,9 +65,18 @@ COUNT_QUERIES = {
     "economy_transactions": "SELECT COUNT(*) FROM `economy_transaction`",
     "deliveries": "SELECT COUNT(*) FROM `dlog`",
     "delivery_metadata": "SELECT COUNT(*) FROM `dlog_meta`",
+    "delivery_placeholders": "SELECT COUNT(*) FROM `dlog_meta` WHERE `note`='migration-import/pending-detail-enrichment'",
+    "delivery_telemetry": "SELECT COUNT(*) FROM `telemetry`",
     "challenge_links": "SELECT COUNT(*) FROM `challenge_record`",
     "challenge_completions": "SELECT COUNT(*) FROM `challenge_completed`",
     "pending_divisions": "SELECT COUNT(*) FROM `division` WHERE `status`=0",
+    "polls": "SELECT COUNT(*) FROM `poll`",
+    "poll_choices": "SELECT COUNT(*) FROM `poll_choice`",
+    "poll_votes": "SELECT COUNT(*) FROM `poll_vote`",
+    "tasks": "SELECT COUNT(*) FROM `task`",
+    "economy_trucks": "SELECT COUNT(*) FROM `economy_truck`",
+    "economy_garage_slots": "SELECT COUNT(*) FROM `economy_garage`",
+    "economy_merchandise": "SELECT COUNT(*) FROM `economy_merch`",
 }
 
 INTEGRITY_QUERIES = {
@@ -68,6 +87,10 @@ INTEGRITY_QUERIES = {
     "challenge_links_without_challenge": "SELECT COUNT(*) FROM `challenge_record` r LEFT JOIN `challenge` c ON c.`challengeid`=r.`challengeid` WHERE c.`challengeid` IS NULL",
     "challenge_completions_without_challenge": "SELECT COUNT(*) FROM `challenge_completed` r LEFT JOIN `challenge` c ON c.`challengeid`=r.`challengeid` WHERE c.`challengeid` IS NULL",
     "pending_divisions_without_delivery": "SELECT COUNT(*) FROM `division` v LEFT JOIN `dlog` d ON d.`logid`=v.`logid` WHERE v.`status`=0 AND d.`logid` IS NULL",
+    "poll_choices_without_poll": "SELECT COUNT(*) FROM `poll_choice` c LEFT JOIN `poll` p ON p.`pollid`=c.`pollid` WHERE p.`pollid` IS NULL",
+    "poll_votes_without_poll": "SELECT COUNT(*) FROM `poll_vote` v LEFT JOIN `poll` p ON p.`pollid`=v.`pollid` WHERE p.`pollid` IS NULL",
+    "poll_votes_without_choice": "SELECT COUNT(*) FROM `poll_vote` v LEFT JOIN `poll_choice` c ON c.`choiceid`=v.`choiceid` WHERE c.`choiceid` IS NULL",
+    "economy_trucks_without_garage_slot": "SELECT COUNT(*) FROM `economy_truck` t LEFT JOIN `economy_garage` g ON g.`slotid`=t.`slotid` WHERE t.`slotid` IS NOT NULL AND g.`slotid` IS NULL",
 }
 
 

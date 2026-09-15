@@ -80,10 +80,10 @@ class ImportDryRunTests(unittest.TestCase):
             self.assertEqual(result["state"], "ready")
             self.assertFalse(result["target_modified"])
             self.assertEqual(result["writes"], 0)
-            self.assertEqual(result["stages"]["deliveries"]["placeholder_items"], 10)
+            self.assertEqual(result["stages"]["deliveries"]["placeholder_items"], 9)
             self.assertEqual(
                 result["stages"]["deliveries"]["detail_strategy"],
-                "schema-placeholders-with-optional-backfill",
+                "frontend-placeholders-with-optional-backfill",
             )
             timestamp_policy = result["stages"]["deliveries"]["timestamp_policy"]
             self.assertEqual(timestamp_policy["state"], "ready")

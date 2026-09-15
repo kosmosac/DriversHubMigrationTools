@@ -1,16 +1,43 @@
 # Drivers Hub Migration Tools
 
-Drivers Hub Migration Tools will transfer data from an existing Drivers Hub to
-a new installation. Source access requires only the public Hub API and an
-administrator account. The destination is expected to be under the operator's
-control.
+Drivers Hub Migration Tools transfers supported data exposed to an
+administrator from an existing Drivers Hub into a new installation. It
+provides resumable source assessment and export, import planning, staged
+destination imports, and final destination verification. Source access
+requires only the Hub's public HTTP API and a dedicated administrator
+application token. The operator needs full control of the destination
+installation and its MariaDB database.
 
-The project is in an early implementation stage. It currently provides a
-read-only source assessment and a resumable export of the supported source
-data. Destination import is not yet available.
+The migration preserves all accessible source data without anonymizing it.
+Some information—including passwords, MFA secrets, sessions, deleted records,
+and data hidden behind unavailable external plugins—cannot be obtained through
+the source API. Missing delivery details and economy transaction metadata use
+recognizable placeholders and are designed for later optional enrichment.
 
-See [DESIGN.md](DESIGN.md) for the planned migration coverage, limitations, and
-implementation stages.
+See [DESIGN.md](DESIGN.md) for the coverage model, technical limitations, and
+planned enrichment functionality.
+
+The current writing import covers accounts and identities, portable
+configuration and branding, exposed user state, standard-plugin content,
+economy state and inventory, baseline deliveries, and their exported challenge
+and pending-division relationships. Fields that the source API does not expose
+are reported explicitly and receive neutral placeholder values where the
+destination schema requires them.
+
+## Workflow
+
+The normal migration sequence is:
+
+1. assess and export the source Hub;
+2. verify the completed export;
+3. create an import plan and inspect the destination;
+4. run the dry-run import;
+5. back up the destination and stop its writer services;
+6. run every documented import stage in order;
+7. verify the destination before starting the Hub.
+
+Each command prints a concise result and the next action. Detailed JSON reports
+and resumable state remain in the migration directory.
 
 ## Requirements
 
@@ -76,9 +103,9 @@ After a successful assessment, run:
 .venv/bin/drivershub-migrate export
 ```
 
-The command writes request progress and retries to the terminal while it runs.
-Its final JSON report remains separate on standard output and can still be
-redirected to another file.
+The command writes request progress and retries to standard error while it
+runs, then prints a short result to standard output. Use the global `--json`
+option to print the complete machine-readable report instead.
 
 The command reuses completed requests. It requires administrative configuration
 access and currently exports:
@@ -87,10 +114,10 @@ access and currently exports:
 - logo, banner, and background image;
 - users who are not accepted as members;
 - accepted members;
-- current bans.
+- current bans;
 - announcements, applications, challenges, downloads, events, polls, and tasks;
-- division definitions and pending division validations.
-- deliveries as an unchanged CSV export and a normalized JSON representation.
+- division definitions and pending division validations;
+- deliveries as an unchanged CSV export and a normalized JSON representation;
 - Economy configuration and account balances; vehicle, garage, merchandise,
   transaction, and garage-slot data are included with source-side effects enabled.
 
@@ -225,7 +252,7 @@ planned import:
 The command refreshes the destination preflight and writes
 `import-dry-run.json`. It reports planned configuration, branding, accounts,
 content, economy data, and deliveries. When delivery details were not exported,
-the report shows how many deliveries require schema-compatible placeholders
+the report shows how many deliveries require frontend-compatible placeholders
 and can be completed by a later optional backfill. The command does not modify
 the destination.
 
@@ -347,6 +374,19 @@ records are deferred until their referenced deliveries have been imported.
 When an event's deleted creator is no longer identified by the source API, the
 record is retained with the Hub's unknown-user identifier.
 
+Import polls, exposed votes, and tasks next:
+
+```bash
+.venv/bin/drivershub-migrate import-polls-tasks \
+  --approve \
+  --backup-confirmed
+```
+
+Poll definitions, choices, and visible voter identities are retained. The API
+does not expose original vote timestamps, so reconstructed votes use `0`.
+Tasks retain their current workflow state, assignments, notes, and exposed
+timestamps; their unavailable creation timestamp also uses `0`.
+
 ## Import economy state
 
 Import the recoverable economy state next:
@@ -365,6 +405,19 @@ balances, and visible messages remain available. A future optional,
 resumable enrichment operation can retrieve additional transaction metadata
 while the source Hub remains reachable.
 
+Import the exported economy inventory after balances and transactions:
+
+```bash
+.venv/bin/drivershub-migrate import-economy-inventory \
+  --approve \
+  --backup-confirmed
+```
+
+This restores trucks, garage slots, and merchandise when present in the
+export. Garage-slot purchase prices and merchandise sale prices are not exposed
+by the source API and therefore use `0`; all exposed identifiers, ownership,
+state, and timestamps are retained.
+
 ## Import baseline deliveries
 
 Import the delivery rows with verified Unix timestamps next:
@@ -381,6 +434,17 @@ The detail payload contains a recognizable, frontend-renderable placeholder and
 `dlog_meta.note` contains `migration-import/pending-detail-enrichment`. This
 keeps delivery pages usable while allowing optional detail backfill to identify
 and safely replace placeholders later.
+
+Baseline imports created with an older version of this tool may contain empty
+detail payloads. With the destination writers stopped, replace only those
+marked migration placeholders and verify the destination again:
+
+```bash
+.venv/bin/drivershub-migrate repair-delivery-placeholders \
+  --approve \
+  --backup-confirmed
+.venv/bin/drivershub-migrate verify-target
+```
 
 ## Import dependent relationships
 
@@ -422,6 +486,16 @@ docker compose up -d
 Then verify login and account claiming, configuration and branding, recent
 deliveries, applications, events, challenges, and economy balances in the Web
 UI. Keep the pre-import database backup until these checks are complete.
+
+## License
+
+Drivers Hub Migration Tools is developed by
+[Kosmos](https://kosmos.ac) and licensed under the GNU Affero General Public
+License v3.0 or later. See [LICENSE](LICENSE).
+
+Drivers Hub is a separate upstream project developed by
+[CharlesWithC](https://charlws.com). This repository contains migration tooling
+and does not redistribute the Drivers Hub applications.
 
 ## Development
 

@@ -10,6 +10,7 @@ import sys
 
 from .assess import assess
 from .account_writer import import_accounts
+from .additional_writer import import_economy_inventory, import_polls_tasks
 from .application_writer import import_applications
 from .configuration_writer import import_configuration
 from .content_writer import import_content
@@ -198,6 +199,19 @@ def parser() -> argparse.ArgumentParser:
     repair_command.add_argument("--approve", action="store_true")
     repair_command.add_argument("--backup-confirmed", action="store_true")
     repair_command.add_argument("--writers-stopped", action="store_true")
+    polls_tasks_command = commands.add_parser(
+        "import-polls-tasks", help="Import exported polls, votes, and tasks"
+    )
+    economy_inventory_command = commands.add_parser(
+        "import-economy-inventory",
+        help="Import exported trucks, garage slots, and merchandise",
+    )
+    for command in (polls_tasks_command, economy_inventory_command):
+        command.add_argument("--output", type=Path)
+        command.add_argument("--target", type=Path)
+        command.add_argument("--approve", action="store_true")
+        command.add_argument("--backup-confirmed", action="store_true")
+        command.add_argument("--writers-stopped", action="store_true")
     dry_run_command.add_argument(
         "--target",
         type=Path,
@@ -268,6 +282,8 @@ def main(argv: list[str] | None = None) -> int:
         "import-relationships",
         "verify-target",
         "repair-delivery-placeholders",
+        "import-polls-tasks",
+        "import-economy-inventory",
     }:
         output_value = args.output or setting("DRIVERSHUB_MIGRATION_DIRECTORY")
         target_mode = (setting("DRIVERSHUB_TARGET_MODE") or "aio").lower()
@@ -417,6 +433,15 @@ def main(argv: list[str] | None = None) -> int:
                     approved=args.approve, backup_confirmed=args.backup_confirmed,
                     writers_stopped=args.writers_stopped,
                 )
+            elif args.command in {"import-polls-tasks", "import-economy-inventory"}:
+                function = import_polls_tasks if args.command == "import-polls-tasks" else import_economy_inventory
+                report = function(
+                    Path(output_value), Path(target_value) if target_value else None,
+                    mode=target_mode,
+                    database={"host": setting("DRIVERSHUB_TARGET_DB_HOST"), "port": setting("DRIVERSHUB_TARGET_DB_PORT"), "user": setting("DRIVERSHUB_TARGET_DB_USER"), "password": setting("DRIVERSHUB_TARGET_DB_PASSWORD"), "database": setting("DRIVERSHUB_TARGET_DB_NAME"), "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET")},
+                    approved=args.approve, backup_confirmed=args.backup_confirmed,
+                    writers_stopped=args.writers_stopped,
+                )
             else:
                 function = preflight_target if args.command == "preflight-target" else create_import_dry_run
                 report = function(
@@ -475,7 +500,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Events: {report.get('events', 0)}")
             print(f"Events with unavailable original creator: {report.get('event_creators_unavailable', 0)}")
             print(f"Challenge delivery links deferred: {report.get('challenge_delivery_links_deferred', 0)}")
-            print("Next: keep destination writer services stopped for the remaining import stages.")
+            print("Next: import polls and tasks while destination writers remain stopped.")
             return 0
         if args.command == "import-economy":
             print("Economy import complete.")
@@ -484,7 +509,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Transactions pending optional enrichment: {report.get('transactions_pending_enrichment', 0)}")
             print(f"Transactions without identifiable parties: {report.get('transactions_without_identifiable_party', 0)}")
             print("Missing source timestamps and internal metadata use recognizable placeholders.")
-            print("Next: keep destination writer services stopped for the remaining import stages.")
+            print("Next: import the remaining economy inventory.")
             return 0
         if args.command == "import-deliveries":
             print("Baseline delivery import complete.")
@@ -517,6 +542,21 @@ def main(argv: list[str] | None = None) -> int:
             print("Delivery placeholder repair complete.")
             print(f"Eligible migration placeholders: {report.get('eligible_placeholders', 0)}")
             print("Next: run verify-target again before restarting destination writers.")
+            return 0
+        if args.command == "import-polls-tasks":
+            print("Poll and task import complete.")
+            print(f"Polls: {report.get('polls', 0)}")
+            print(f"Poll choices: {report.get('poll_choices', 0)}")
+            print(f"Poll votes: {report.get('poll_votes', 0)}")
+            print(f"Tasks: {report.get('tasks', 0)}")
+            print("Next: import economy state while destination writers remain stopped.")
+            return 0
+        if args.command == "import-economy-inventory":
+            print("Economy inventory import complete.")
+            print(f"Trucks: {report.get('trucks', 0)}")
+            print(f"Garage slots: {report.get('garage_slots', 0)}")
+            print(f"Merchandise items: {report.get('merchandise', 0)}")
+            print("Next: import baseline deliveries while destination writers remain stopped.")
             return 0
         print(
             json.dumps(report, indent=2, ensure_ascii=False)

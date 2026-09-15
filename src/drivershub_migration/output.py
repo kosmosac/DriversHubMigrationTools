@@ -134,6 +134,8 @@ def render_import_dry_run(report: dict[str, object], directory: Path) -> str:
     plugins = stages.get("plugin_resources", {}) if isinstance(stages, dict) else {}
     economy = stages.get("economy", {}) if isinstance(stages, dict) else {}
     deliveries = stages.get("deliveries", {}) if isinstance(stages, dict) else {}
+    polls_tasks = stages.get("polls_tasks", {}) if isinstance(stages, dict) else {}
+    inventory = stages.get("economy_inventory", {}) if isinstance(stages, dict) else {}
     timestamp_policy = (
         deliveries.get("timestamp_policy", {})
         if isinstance(deliveries, dict)
@@ -151,6 +153,11 @@ def render_import_dry_run(report: dict[str, object], directory: Path) -> str:
         _line("Core resource groups", len(core) if isinstance(core, dict) else 0),
         _line("Plugin resource groups", len(plugins) if isinstance(plugins, dict) else 0),
         _line("Economy resource groups", len(economy) if isinstance(economy, dict) else 0),
+        _line("Polls", polls_tasks.get("polls", 0)),
+        _line("Tasks", polls_tasks.get("tasks", 0)),
+        _line("Economy trucks", inventory.get("trucks", 0)),
+        _line("Economy garage slots", inventory.get("garage_slots", 0)),
+        _line("Economy merchandise items", inventory.get("merchandise", 0)),
         _line("Deliveries", deliveries.get("baseline_items", 0)),
         _line("Deliveries using placeholders", deliveries.get("placeholder_items", 0)),
         _line(

@@ -28,3 +28,29 @@ class DeliveryImportTests(unittest.TestCase):
         self.assertIn("1700000000", sql)
         self.assertEqual(summary["deliveries"], 1)
         self.assertEqual(summary["duplicate_csv_rows_ignored"], 1)
+
+    def test_imports_exported_detail_and_telemetry_instead_of_placeholder(self):
+        with TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            normalized = directory / "normalized"
+            normalized.mkdir()
+            delivery = {"logid": 1, "user": {"userid": 7}, "max_speed": 80, "timestamp": 1700000000, "status": 1, "profit": 10, "unit": 1, "fuel": 4, "distance": 20, "views": 2, "source_city": "A", "source_company": "B", "destination_city": "C", "destination_company": "D", "cargo": "E", "cargo_mass": 100}
+            (normalized / "deliveries.json").write_text(json.dumps({"records": [delivery]}))
+            (normalized / "deliveries-csv.json").write_text(json.dumps({"records": []}))
+            (normalized / "deliveries-details.json").write_text(json.dumps({"records": [{
+                "logid": 1,
+                "detail": {"object": "event", "type": "job.delivered", "data": {"object": {"events": []}}},
+                "telemetry": "v21,mods;route",
+            }]}))
+
+            class Compressor:
+                def compress(self, value):
+                    return b"compressed:" + value
+
+            with patch.dict("sys.modules", {"zstandard": type("Zstd", (), {"ZstdCompressor": Compressor})}):
+                sql, summary = build_delivery_stage(directory)
+
+        self.assertIn("INSERT INTO `telemetry`", sql)
+        self.assertEqual(summary["imported_details"], 1)
+        self.assertEqual(summary["imported_telemetry"], 1)
+        self.assertEqual(summary["detail_placeholders"], 0)

@@ -193,9 +193,17 @@ def create_import_dry_run(
     csv_entry = csv_entry if isinstance(csv_entry, dict) else {}
     list_entry = list_entry if isinstance(list_entry, dict) else {}
     detail_entry = detail_entry if isinstance(detail_entry, dict) else {}
-    baseline_deliveries = _items(csv_entry)
+    baseline_deliveries = _items(list_entry)
     detail_deliveries = _items(detail_entry)
     missing_details = max(baseline_deliveries - detail_deliveries, 0)
+    plugins = export.get("plugin_resources", {})
+    plugins = plugins if isinstance(plugins, dict) else {}
+    poll_entry = plugins.get("poll", {})
+    task_entry = plugins.get("task", {})
+    economy_entry = plugins.get("economy", {})
+    poll_entry = poll_entry if isinstance(poll_entry, dict) else {}
+    task_entry = task_entry if isinstance(task_entry, dict) else {}
+    economy_entry = economy_entry if isinstance(economy_entry, dict) else {}
     timestamp_policy = _delivery_timestamp_policy(
         migration_directory, csv_entry, list_entry
     )
@@ -227,6 +235,19 @@ def create_import_dry_run(
             "core_resources": _resource_counts(export),
             "plugin_resources": _plugin_counts(export),
             "economy": _economy_counts(export),
+            "polls_tasks": {
+                "polls": _items(poll_entry.get("details")),
+                "tasks": _items(task_entry.get("details")),
+                "unavailable_vote_timestamps": True,
+                "unavailable_task_create_timestamps": True,
+            },
+            "economy_inventory": {
+                "trucks": _items(economy_entry.get("trucks")),
+                "garage_slots": _items(economy_entry.get("garage_slots")),
+                "merchandise": _items(economy_entry.get("merch")),
+                "unavailable_garage_slot_prices": True,
+                "unavailable_merchandise_sell_prices": True,
+            },
             "deliveries": {
                 "state": "ready" if deliveries_ready else "blocked",
                 "baseline_items": baseline_deliveries,
@@ -236,7 +257,7 @@ def create_import_dry_run(
                 "detail_strategy": (
                     "import-exported-details"
                     if missing_details == 0
-                    else "schema-placeholders-with-optional-backfill"
+                    else "frontend-placeholders-with-optional-backfill"
                 ),
                 "timestamp_policy": timestamp_policy,
             },

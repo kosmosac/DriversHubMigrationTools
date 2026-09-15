@@ -541,13 +541,12 @@ exported payload are preserved verbatim. A writing import must reject an
 unexpected timestamp type instead of inferring a time zone. Database sessions
 used for migration writes must explicitly use UTC.
 
-When optional delivery details exist, a separate import stage can additionally
-restore the exposed tracker payload in `dlog.data` and route data in
-`telemetry`. This improves historical detail pages and permits more detailed
-statistics to be rebuilt. When this stage is omitted, the importer writes only
-the documented schema-compatible placeholders required for safe operation. It
-must not represent placeholder events, vehicle data, or telemetry as source
-data.
+When optional delivery details exist, the delivery import restores the exposed
+tracker payload in `dlog.data` and route data in `telemetry` directly. This
+improves historical detail pages and permits more detailed statistics to be
+rebuilt. For each missing detail, the importer writes only the documented
+frontend-compatible placeholder required for safe operation. It must not
+represent placeholder events, vehicle data, or telemetry as source data.
 
 ### Deferred delivery detail backfill
 
@@ -706,6 +705,9 @@ faithfully when the source API does not return it:
 - sessions and application tokens;
 - deleted deliveries;
 - the removed driver object in exported delivery details;
+- original poll-vote timestamps;
+- task creation timestamps;
+- original garage-slot purchase prices and merchandise sale prices;
 - protected configuration secrets;
 - complete personal notes, notifications, activity, and private user settings;
 - internal records owned only by unsupported external plugins;
