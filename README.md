@@ -229,6 +229,39 @@ the report shows how many deliveries require schema-compatible placeholders
 and can be completed by a later optional backfill. The command does not modify
 the destination.
 
+## Import accounts
+
+The account stage is the first writing import stage. It preserves source UIDs
+and member IDs. A matching bootstrap administrator keeps the destination
+password and MFA enrollment. Otherwise, the bootstrap administrator is moved
+to the recovery IDs shown by `preflight-target`. Imported users keep their
+Steam ID, Discord ID, email address, roles, profile, join timestamp, and
+selected tracker. Passwords and MFA secrets are not imported.
+
+Create and verify a destination backup. Then stop every service that can write
+to the Hub database while MariaDB remains running:
+
+```bash
+cd /path/to/DriversHubDockerAIO
+docker compose stop backend bannergen db-init
+cd /path/to/DriversHubMigrationTools
+.venv/bin/drivershub-migrate import-accounts --approve --backup-confirmed
+```
+
+The command checks the service state, refreshes the destination preflight,
+writes all account changes in one UTC database transaction, and verifies the
+imported UIDs. It records completion in `import-journal.json` and refuses to
+repeat a completed account stage.
+
+Do not restart the destination Hub after this command yet. The account stage
+does not import the remaining content, plugin data, economy data, or delivery
+history. Keep the writer services stopped until the remaining import stages
+have completed.
+
+For a direct MariaDB destination, stop all backend writers yourself and add
+`--writers-stopped` to the command. This is an explicit confirmation because
+the tool cannot inspect services outside the Docker AIO deployment.
+
 ## Development
 
 Run the test suite with the Python standard library:

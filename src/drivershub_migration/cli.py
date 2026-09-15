@@ -9,6 +9,7 @@ from pathlib import Path
 import sys
 
 from .assess import assess
+from .account_writer import import_accounts
 from .env import read_env
 from .exporter import export_source
 from .dry_run import create_import_dry_run
@@ -98,6 +99,14 @@ def parser() -> argparse.ArgumentParser:
         type=Path,
         help="migration directory; overrides DRIVERSHUB_MIGRATION_DIRECTORY",
     )
+    account_command = commands.add_parser(
+        "import-accounts", help="Import accounts into a stopped destination"
+    )
+    account_command.add_argument("--output", type=Path)
+    account_command.add_argument("--target", type=Path)
+    account_command.add_argument("--approve", action="store_true")
+    account_command.add_argument("--backup-confirmed", action="store_true")
+    account_command.add_argument("--writers-stopped", action="store_true")
     dry_run_command.add_argument(
         "--target",
         type=Path,
@@ -154,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0 if report["integrity"] == "valid" and report["export"] == "complete" else 1
         return 0 if report["state"] == "complete" else 1
 
-    if args.command in {"preflight-target", "dry-run-import"}:
+    if args.command in {"preflight-target", "dry-run-import", "import-accounts"}:
         output_value = args.output or setting("DRIVERSHUB_MIGRATION_DIRECTORY")
         target_mode = (setting("DRIVERSHUB_TARGET_MODE") or "aio").lower()
         target_value = args.target or setting("DRIVERSHUB_TARGET_DIRECTORY")
@@ -165,8 +174,26 @@ def main(argv: list[str] | None = None) -> int:
         if target_mode == "aio" and not target_value:
             raise SystemExit("Set DRIVERSHUB_TARGET_DIRECTORY in .env or use --target")
         try:
-            function = preflight_target if args.command == "preflight-target" else create_import_dry_run
-            report = function(
+            if args.command == "import-accounts":
+                report = import_accounts(
+                    Path(output_value),
+                    Path(target_value) if target_value else None,
+                    mode=target_mode,
+                    database={
+                        "host": setting("DRIVERSHUB_TARGET_DB_HOST"),
+                        "port": setting("DRIVERSHUB_TARGET_DB_PORT"),
+                        "user": setting("DRIVERSHUB_TARGET_DB_USER"),
+                        "password": setting("DRIVERSHUB_TARGET_DB_PASSWORD"),
+                        "database": setting("DRIVERSHUB_TARGET_DB_NAME"),
+                        "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET"),
+                    },
+                    approved=args.approve,
+                    backup_confirmed=args.backup_confirmed,
+                    writers_stopped=args.writers_stopped,
+                )
+            else:
+                function = preflight_target if args.command == "preflight-target" else create_import_dry_run
+                report = function(
                     Path(output_value),
                     Path(target_value) if target_value else None,
                     mode=target_mode,
@@ -181,6 +208,13 @@ def main(argv: list[str] | None = None) -> int:
                 )
         except ValueError as exc:
             raise SystemExit(str(exc)) from exc
+        if args.command == "import-accounts":
+            accounts = report["stages"]["accounts"]
+            print("Account import complete.")
+            print(f"Imported accounts: {accounts.get('inserted_accounts', 0)}")
+            print(f"Merged accounts: {accounts.get('merged_accounts', 0)}")
+            print("Next: keep destination writer services stopped for the remaining import stages.")
+            return 0
         print(
             json.dumps(report, indent=2, ensure_ascii=False)
             if args.json
