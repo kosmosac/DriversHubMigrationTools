@@ -334,6 +334,19 @@ Import application records next:
 This preserves application IDs, applicants, answers, decisions, responsible
 staff members, and original submission and response timestamps.
 
+Import event and challenge definitions next:
+
+```bash
+.venv/bin/drivershub-migrate import-events-challenges \
+  --approve \
+  --backup-confirmed
+```
+
+Events retain attendance and votes. Challenge delivery links and completion
+records are deferred until their referenced deliveries have been imported.
+When an event's deleted creator is no longer identified by the source API, the
+record is retained with the Hub's unknown-user identifier.
+
 ## Development
 
 Run the test suite with the Python standard library:

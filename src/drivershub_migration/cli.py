@@ -15,6 +15,7 @@ from .configuration_writer import import_configuration
 from .content_writer import import_content
 from .user_state_writer import import_user_state
 from .env import read_env
+from .event_challenge_writer import import_events_challenges
 from .exporter import export_source
 from .dry_run import create_import_dry_run
 from .import_plan import create_import_plan
@@ -145,6 +146,14 @@ def parser() -> argparse.ArgumentParser:
     applications_command.add_argument("--approve", action="store_true")
     applications_command.add_argument("--backup-confirmed", action="store_true")
     applications_command.add_argument("--writers-stopped", action="store_true")
+    event_command = commands.add_parser(
+        "import-events-challenges", help="Import event and challenge definitions"
+    )
+    event_command.add_argument("--output", type=Path)
+    event_command.add_argument("--target", type=Path)
+    event_command.add_argument("--approve", action="store_true")
+    event_command.add_argument("--backup-confirmed", action="store_true")
+    event_command.add_argument("--writers-stopped", action="store_true")
     dry_run_command.add_argument(
         "--target",
         type=Path,
@@ -209,6 +218,7 @@ def main(argv: list[str] | None = None) -> int:
         "import-user-state",
         "import-content",
         "import-applications",
+        "import-events-challenges",
     }:
         output_value = args.output or setting("DRIVERSHUB_MIGRATION_DIRECTORY")
         target_mode = (setting("DRIVERSHUB_TARGET_MODE") or "aio").lower()
@@ -308,6 +318,17 @@ def main(argv: list[str] | None = None) -> int:
                     backup_confirmed=args.backup_confirmed,
                     writers_stopped=args.writers_stopped,
                 )
+            elif args.command == "import-events-challenges":
+                report = import_events_challenges(
+                    Path(output_value), Path(target_value) if target_value else None,
+                    mode=target_mode,
+                    database={
+                        "host": setting("DRIVERSHUB_TARGET_DB_HOST"), "port": setting("DRIVERSHUB_TARGET_DB_PORT"),
+                        "user": setting("DRIVERSHUB_TARGET_DB_USER"), "password": setting("DRIVERSHUB_TARGET_DB_PASSWORD"),
+                        "database": setting("DRIVERSHUB_TARGET_DB_NAME"), "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET"),
+                    }, approved=args.approve, backup_confirmed=args.backup_confirmed,
+                    writers_stopped=args.writers_stopped,
+                )
             else:
                 function = preflight_target if args.command == "preflight-target" else create_import_dry_run
                 report = function(
@@ -358,6 +379,14 @@ def main(argv: list[str] | None = None) -> int:
             print("Application import complete.")
             print(f"Applications: {report.get('applications', 0)}")
             print(f"Pending applications: {report.get('pending_applications', 0)}")
+            print("Next: keep destination writer services stopped for the remaining import stages.")
+            return 0
+        if args.command == "import-events-challenges":
+            print("Event and challenge import complete.")
+            print(f"Challenges: {report.get('challenges', 0)}")
+            print(f"Events: {report.get('events', 0)}")
+            print(f"Events with unavailable original creator: {report.get('event_creators_unavailable', 0)}")
+            print(f"Challenge delivery links deferred: {report.get('challenge_delivery_links_deferred', 0)}")
             print("Next: keep destination writer services stopped for the remaining import stages.")
             return 0
         print(
