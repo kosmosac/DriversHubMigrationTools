@@ -347,6 +347,20 @@ records are deferred until their referenced deliveries have been imported.
 When an event's deleted creator is no longer identified by the source API, the
 record is retained with the Hub's unknown-user identifier.
 
+## Import economy state
+
+Import the recoverable economy state next:
+
+```bash
+.venv/bin/drivershub-migrate import-economy \
+  --approve \
+  --backup-confirmed
+```
+
+Current balances are imported. The source transaction API does not expose the original stored timestamp or
+internal transaction metadata, so transaction views cannot be reconstructed
+losslessly and are reported but not inserted.
+
 ## Development
 
 Run the test suite with the Python standard library:
