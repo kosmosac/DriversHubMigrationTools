@@ -38,6 +38,49 @@ The normal migration sequence is:
 Each command prints a concise result and the next action. Detailed JSON reports
 and resumable state remain in the migration directory.
 
+### Complete command sequence
+
+Run the read-only source and planning stages first:
+
+```bash
+.venv/bin/drivershub-migrate assess
+.venv/bin/drivershub-migrate export
+.venv/bin/drivershub-migrate verify
+.venv/bin/drivershub-migrate plan-import
+.venv/bin/drivershub-migrate preflight-target
+.venv/bin/drivershub-migrate dry-run-import
+```
+
+After creating a destination backup and stopping all destination writer
+services, run every writing stage in this order:
+
+```bash
+.venv/bin/drivershub-migrate import-accounts --approve --backup-confirmed
+.venv/bin/drivershub-migrate import-configuration --approve --backup-confirmed
+.venv/bin/drivershub-migrate import-user-state --approve --backup-confirmed
+.venv/bin/drivershub-migrate import-content --approve --backup-confirmed
+.venv/bin/drivershub-migrate import-applications --approve --backup-confirmed
+.venv/bin/drivershub-migrate import-events-challenges --approve --backup-confirmed
+.venv/bin/drivershub-migrate import-polls-tasks --approve --backup-confirmed
+.venv/bin/drivershub-migrate import-economy --approve --backup-confirmed
+.venv/bin/drivershub-migrate import-economy-inventory --approve --backup-confirmed
+.venv/bin/drivershub-migrate import-deliveries --approve --backup-confirmed
+.venv/bin/drivershub-migrate import-relationships --approve --backup-confirmed
+.venv/bin/drivershub-migrate verify-target
+```
+
+After successful verification, start the destination Hub. The optional,
+resumable enrichment jobs may run while it is online:
+
+```bash
+.venv/bin/drivershub-migrate backfill-delivery-details --approve
+.venv/bin/drivershub-migrate enrich-economy-transactions --approve
+```
+
+The sections below describe prerequisites, effects, limitations, and recovery
+behavior for every command. Do not use this overview as a replacement for
+those instructions.
+
 ## Requirements
 
 - Python 3.11 or newer
