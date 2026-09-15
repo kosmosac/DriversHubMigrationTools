@@ -54,10 +54,16 @@ class HumanOutputTests(unittest.TestCase):
                 "bootstrap": {
                     "state": "ready",
                     "action": "retain-as-recovery-account",
+                    "original_uid": 1,
+                    "replacement_uid": 1900,
+                    "original_userid": 1,
+                    "replacement_userid": 1493,
                 },
             }
         )
         self.assertIn("Bootstrap action: retain-as-recovery-account", text)
+        self.assertIn("Recovery UID: 1 -> 1900", text)
+        self.assertIn("Recovery member ID: 1 -> 1493", text)
         self.assertIn("review and approve", text)
 
 

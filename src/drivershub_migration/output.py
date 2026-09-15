@@ -96,6 +96,27 @@ def render_target_preflight(report: dict[str, object]) -> str:
         _line("Internal ID collisions", len(collisions) if isinstance(collisions, list) else 0),
         _line("Bootstrap action", bootstrap.get("action", bootstrap.get("state", "unknown")) if isinstance(bootstrap, dict) else "unknown"),
     ]
+    if isinstance(bootstrap, dict) and bootstrap.get("action") == "retain-as-recovery-account":
+        lines.extend(
+            [
+                _line(
+                    "Recovery UID",
+                    f'{bootstrap.get("original_uid")} -> {bootstrap.get("replacement_uid")}',
+                ),
+                _line(
+                    "Recovery member ID",
+                    f'{bootstrap.get("original_userid")} -> {bootstrap.get("replacement_userid")}',
+                ),
+            ]
+        )
+    elif isinstance(bootstrap, dict) and bootstrap.get("action") == "merge-with-source-administrator":
+        matched_by = bootstrap.get("matched_by", [])
+        lines.append(
+            _line(
+                "Identity match",
+                ", ".join(matched_by) if isinstance(matched_by, list) else "unknown",
+            )
+        )
     if state == "complete":
         lines.append("Next: the destination is ready for an import dry run.")
     elif isinstance(bootstrap, dict) and bootstrap.get("state") == "ready":
