@@ -13,6 +13,7 @@ from .account_writer import import_accounts
 from .application_writer import import_applications
 from .configuration_writer import import_configuration
 from .content_writer import import_content
+from .delivery_writer import import_deliveries
 from .user_state_writer import import_user_state
 from .env import read_env
 from .event_challenge_writer import import_events_challenges
@@ -163,6 +164,14 @@ def parser() -> argparse.ArgumentParser:
     economy_command.add_argument("--approve", action="store_true")
     economy_command.add_argument("--backup-confirmed", action="store_true")
     economy_command.add_argument("--writers-stopped", action="store_true")
+    delivery_command = commands.add_parser(
+        "import-deliveries", help="Import baseline delivery history"
+    )
+    delivery_command.add_argument("--output", type=Path)
+    delivery_command.add_argument("--target", type=Path)
+    delivery_command.add_argument("--approve", action="store_true")
+    delivery_command.add_argument("--backup-confirmed", action="store_true")
+    delivery_command.add_argument("--writers-stopped", action="store_true")
     dry_run_command.add_argument(
         "--target",
         type=Path,
@@ -229,6 +238,7 @@ def main(argv: list[str] | None = None) -> int:
         "import-applications",
         "import-events-challenges",
         "import-economy",
+        "import-deliveries",
     }:
         output_value = args.output or setting("DRIVERSHUB_MIGRATION_DIRECTORY")
         target_mode = (setting("DRIVERSHUB_TARGET_MODE") or "aio").lower()
@@ -347,6 +357,14 @@ def main(argv: list[str] | None = None) -> int:
                     approved=args.approve, backup_confirmed=args.backup_confirmed,
                     writers_stopped=args.writers_stopped,
                 )
+            elif args.command == "import-deliveries":
+                report = import_deliveries(
+                    Path(output_value), Path(target_value) if target_value else None,
+                    mode=target_mode,
+                    database={"host": setting("DRIVERSHUB_TARGET_DB_HOST"), "port": setting("DRIVERSHUB_TARGET_DB_PORT"), "user": setting("DRIVERSHUB_TARGET_DB_USER"), "password": setting("DRIVERSHUB_TARGET_DB_PASSWORD"), "database": setting("DRIVERSHUB_TARGET_DB_NAME"), "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET")},
+                    approved=args.approve, backup_confirmed=args.backup_confirmed,
+                    writers_stopped=args.writers_stopped,
+                )
             else:
                 function = preflight_target if args.command == "preflight-target" else create_import_dry_run
                 report = function(
@@ -415,6 +433,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Transactions without identifiable parties: {report.get('transactions_without_identifiable_party', 0)}")
             print("Missing source timestamps and internal metadata use recognizable placeholders.")
             print("Next: keep destination writer services stopped for the remaining import stages.")
+            return 0
+        if args.command == "import-deliveries":
+            print("Baseline delivery import complete.")
+            print(f"Deliveries: {report.get('deliveries', 0)}")
+            print(f"Detail placeholders: {report.get('detail_placeholders', 0)}")
+            print(f"Deliveries without CSV metadata: {report.get('missing_csv_metadata', 0)}")
+            print(f"Duplicate CSV rows ignored: {report.get('duplicate_csv_rows_ignored', 0)}")
+            print(f"CSV-only rows without safe timestamps not imported: {report.get('csv_only_rows_not_imported', 0)}")
+            print("Next: keep destination writer services stopped while relationships are imported.")
             return 0
         print(
             json.dumps(report, indent=2, ensure_ascii=False)

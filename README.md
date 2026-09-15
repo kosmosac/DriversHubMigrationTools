@@ -365,6 +365,22 @@ balances, and visible messages remain available. A future optional,
 resumable enrichment operation can retrieve additional transaction metadata
 while the source Hub remains reachable.
 
+## Import baseline deliveries
+
+Import the delivery rows with verified Unix timestamps next:
+
+```bash
+.venv/bin/drivershub-migrate import-deliveries \
+  --approve \
+  --backup-confirmed
+```
+
+The list API is the authoritative baseline when the independently collected
+CSV snapshot differs. Core delivery values and list metadata are preserved.
+The raw detail payload remains empty and `dlog_meta.note` contains
+`migration-import/pending-detail-enrichment`, allowing optional detail
+backfill to identify and safely replace placeholders later.
+
 ## Development
 
 Run the test suite with the Python standard library:

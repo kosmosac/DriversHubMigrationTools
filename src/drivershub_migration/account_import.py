@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from base64 import b64encode
 from pathlib import Path
 
@@ -72,6 +73,10 @@ def _sql_value(value: object) -> str:
         return "1" if value else "0"
     if isinstance(value, int):
         return str(value)
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError("Unsupported non-finite SQL number")
+        return repr(value)
     if isinstance(value, str):
         if value == "":
             return "''"
