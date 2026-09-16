@@ -1,530 +1,219 @@
 # Drivers Hub Migration Tools
 
-Drivers Hub Migration Tools transfers supported data exposed to an
-administrator from an existing Drivers Hub into a new installation. It
-provides resumable source assessment and export, import planning, staged
-destination imports, and final destination verification. Source access
-requires only the Hub's public HTTP API and a dedicated administrator
-application token. The operator needs full control of the destination
-installation and its MariaDB database.
+Drivers Hub Migration Tools transfers supported data from an existing Drivers
+Hub into a new installation. Source access requires the Hub's public HTTP API
+and an administrator application token. Full access to the destination and its
+MariaDB database is required.
 
-The migration preserves all accessible source data without anonymizing it.
-Some information—including passwords, MFA secrets, sessions, deleted records,
-and data hidden behind unavailable external plugins—cannot be obtained through
-the source API. Missing delivery details and economy transaction timestamps use
-recognizable placeholders and can be restored with the resumable post-migration
-enrichment commands while the source Hub remains reachable.
+The recommended destination is
+[DriversHubDockerAIO](https://github.com/kosmosac/DriversHubDockerAIO). Other
+HubBackend installations with an accessible MariaDB database are also
+supported.
+
+Passwords, MFA secrets, sessions, deleted records, and data available only to
+unsupported external plugins cannot be transferred. Optional post-migration
+jobs can retrieve delivery details and economy transaction timestamps while
+the source Hub remains reachable.
 
 See [DESIGN.md](DESIGN.md) for the coverage model and technical limitations.
 
-The current writing import covers accounts and identities, portable
-configuration and branding, exposed user state, standard-plugin content,
-economy state and inventory, baseline deliveries, and their exported challenge
-and pending-division relationships. Fields that the source API does not expose
-are reported explicitly and receive neutral placeholder values where the
-destination schema requires them.
-
-## Workflow
-
-The normal migration sequence is:
-
-1. run the resumable source export workflow;
-2. prepare and back up the destination;
-3. stop its writer services;
-4. run the resumable destination import workflow;
-5. start and check the migrated Hub.
-
-Each command prints a concise result and the next action. Detailed JSON reports
-and resumable state remain in the migration directory.
-
-### Complete command sequence
-
-Assess, export, and verify the source in one resumable operation:
-
-```bash
-.venv/bin/drivershub-migrate export-all
-```
-
-Create a destination backup and stop all destination writer services. Then run
-the complete destination workflow:
-
-```bash
-.venv/bin/drivershub-migrate import-all --backup-confirmed
-```
-
-`import-all` creates the import plan, performs destination preflight, runs the
-full rollback validation, executes every import stage in dependency order, and
-verifies the final destination. `--backup-confirmed` is required only when the
-workflow starts writing for the first time. If it is interrupted, run the same
-command again; completed stages are read from `import-journal.json` and skipped.
-
-After successful verification, start the destination Hub. The optional,
-resumable enrichment jobs may run while it is online:
-
-```bash
-.venv/bin/drivershub-migrate backfill-delivery-details
-.venv/bin/drivershub-migrate enrich-economy-transactions
-```
-
-The individual commands documented below remain available for diagnosis and
-targeted recovery. They are not required during the normal workflow.
-
 ## Requirements
 
-- Python 3.11 or newer
+- Python 3.11 or newer with the `venv` module
 - the API URL of the source Hub, including its prefix
 - a temporary application token created by a source Hub administrator
+- full access to the destination Hub and its MariaDB database
 
 ## Installation
 
+On Debian and Ubuntu, install Python and the separately packaged `venv` module
+first:
+
 ```bash
+sudo apt install python3 python3-venv tmux
+```
+
+Then install the Migration Tools:
+
+```bash
+git clone https://github.com/kosmosac/DriversHubMigrationTools.git
+cd DriversHubMigrationTools
 python3 -m venv .venv
 .venv/bin/pip install -e .
 cp .env.example .env
 ```
 
-Commands print short status information and the next recommended action. Their
-complete reports are stored in the migration directory. Add the global
-`--json` option before the command when machine-readable standard output is
-required:
+## Configuration
 
-```bash
-.venv/bin/drivershub-migrate --json verify
+Set the source and migration directory in `.env`:
+
+```dotenv
+DRIVERSHUB_SOURCE_URL=https://hub.example.com/api/
+DRIVERSHUB_APPLICATION_TOKEN=replace-with-the-source-token
+DRIVERSHUB_MIGRATION_DIRECTORY=migrations/example
 ```
 
-## Advanced individual commands
+For a Drivers Hub Docker AIO destination, set:
 
-The commands below expose the stages used by `export-all` and `import-all`.
-They are useful for diagnosis or targeted recovery, but users should normally
-run the combined workflows shown above.
-
-### Assess a source Hub
-
-Create a dedicated application token in the source Hub. Give it a name that
-identifies the migration and its creation date. Set the source URL, token, and
-migration directory in `.env`. Then run:
-
-```bash
-.venv/bin/drivershub-migrate assess
+```dotenv
+DRIVERSHUB_TARGET_MODE=aio
+DRIVERSHUB_TARGET_DIRECTORY=/opt/DriversHubDockerAIO
 ```
 
-Delete the application token after the final export unless you intend to run
-the optional post-migration enrichment jobs. Those jobs need source API access
-and can use the same dedicated token while they run.
+For another HubBackend installation, set `DRIVERSHUB_TARGET_MODE=mariadb` and
+configure the `DRIVERSHUB_TARGET_DB_*` values and
+`DRIVERSHUB_TARGET_CONFIG_PATH` described in [.env.example](.env.example).
 
-The assessment only sends HTTP `GET` requests. It writes these files to the
-selected migration directory:
-
-- `assessment.json`: assessment results
-- `work-journal.json`: persistent request state
-- `raw/assessment/`: unmodified source responses
-
-Run the same command with the same directory after an interruption. Completed
-requests are reused. Use `--no-token` to inspect only public endpoints. Use
-`--env-file PATH` before the `assess` command to select a different
-configuration file:
-
-```bash
-.venv/bin/drivershub-migrate --env-file PATH assess
-```
-
-The migration directory contains personal and operational data and should be
-kept in the trusted environment used for the migration.
-
-### Export supported source data
-
-After a successful assessment, run:
-
-```bash
-.venv/bin/drivershub-migrate export
-```
-
-The command writes request progress and retries to standard error while it
-runs, then prints a short result to standard output. Use the global `--json`
-option to print the complete machine-readable report instead.
-
-The command reuses completed requests. It requires administrative configuration
-access and currently exports:
-
-- backend and frontend configuration;
-- logo, banner, and background image;
-- users who are not accepted as members;
-- accepted members;
-- current bans;
-- announcements, applications, challenges, downloads, events, polls, and tasks;
-- division definitions and pending division validations;
-- deliveries as an unchanged CSV export and a normalized JSON representation;
-- Economy configuration, account balances, vehicles, garages, merchandise,
-  transactions, and garage slots.
-
-Plugin content is exported only when the frontend configuration reports that
-the corresponding standard plugin is enabled.
-
-The upstream transaction endpoint reports inconsistent totals for some
-transaction types. The exporter therefore reads each account until an actual
-empty page and deduplicates the result by transaction ID.
-
-The exporter collects the delivery CSV and paginated delivery list by default.
 Set `DRIVERSHUB_EXPORT_DELIVERY_DETAILS=true` only when the initial export
-should also retrieve every individual delivery payload. This can require one
-request per delivery and take many hours on a large Hub. Leaving it disabled
-does not prevent migration: frontend-compatible placeholders are imported and
-the resumable detail backfill can replace them later.
+should request every delivery detail. This can take many hours on a large Hub.
+When left disabled, the details can be retrieved after migration with the
+resumable backfill command.
 
-`DRIVERSHUB_REQUEST_INTERVAL` controls the minimum delay between requests. The
-default value of `1.1` seconds stays below the limit of 60 requests per minute
-used by some source endpoints. Use a different value only when the source
-operator documents a safe request rate.
-
-Paginated responses are stored unchanged below `raw/`. Combined representations
-for later import are stored below `normalized/`. Missing branding assets do not
-fail the export. `export.json` records completeness, item counts, failures, and
-checksums.
-
-The delivery list uses ascending delivery IDs. If new deliveries appear while a
-long export is running, the exporter follows the increased page count and uses
-the latest reported item total. Decreasing totals and missing pages remain
-errors.
-
-Enabled standard plugins are detected from the frontend configuration. The
-source API does not expose its complete external-plugin list. The report marks
-external-plugin detection as partial instead of treating undetected plugins as
-absent.
-
-The audit log is not exported because its endpoint does not accept application
-tokens. Passwords, MFA secrets, OAuth tokens, sessions, deleted deliveries,
-private user settings, and data owned only by unavailable external plugins are
-also outside the accessible source data.
-
-### Verify an export
-
-Before transferring or importing a migration directory, verify its manifest,
-files, and checksums:
+Some exports, imports, and enrichment jobs can run for several hours. Start
+them in a `tmux` session so that an interrupted SSH connection does not stop
+the command:
 
 ```bash
-.venv/bin/drivershub-migrate verify
+tmux new -s drivershub-migration
 ```
 
-This command does not contact the source Hub. `integrity` reports whether the
-manifest and all referenced files are valid. `export` reports whether any
-export entries are failed, incomplete, or inconsistent. `manifest_states`
-summarizes all recorded states. The command exits with a nonzero status when
-the integrity is invalid or the export is incomplete.
-
-### Plan the destination import
-
-Create the configuration, branding, identity, and account-claim plan before
-any destination data is written:
+Detach with `Ctrl+B`, then `D`. Reopen the session later with:
 
 ```bash
-.venv/bin/drivershub-migrate plan-import
+tmux attach -t drivershub-migration
 ```
 
-The plan separates portable backend values from protected values that the
-source API does not return. Empty protected values never replace destination
-secrets. Portable frontend branding settings are kept, while the frontend
-domain, API URL, plugin list, abbreviation, and generated asset keys are
-derived from the destination backend during import. Available logo, banner,
-and background files are included in the plan.
+## Migration
 
-The command also preserves each source `uid` and `userid` in its proposed
-target mapping. Imported Steam and Discord IDs let users claim their existing
-account by signing in again through the corresponding provider. An imported
-email address provides a third claim method through the normal password-reset
-flow when SMTP is configured. Passwords, MFA secrets, and sessions are not
-imported, and users must enroll in MFA again.
+### 1. Export the source
 
-The command writes `import-plan.json` and stops with a nonzero status when it
-finds duplicate internal IDs, Steam IDs, Discord IDs, or email addresses.
-Accounts without Steam, Discord, or a valid email address are listed as
-requiring manual recovery. No destination is contacted or modified at this
-stage.
-
-### Inspect the destination
-
-The destination can be this project's preferred Drivers Hub Docker AIO
-deployment or any installation of the upstream HubBackend with an accessible
-MariaDB database.
-
-For Docker AIO, set `DRIVERSHUB_TARGET_MODE=aio` and
-`DRIVERSHUB_TARGET_DIRECTORY` to the initialized deployment directory. Its
-MariaDB service must be running. For another installation, set
-`DRIVERSHUB_TARGET_MODE=mariadb` and provide the `DRIVERSHUB_TARGET_DB_*`
-connection values in `.env`. Then inspect its existing user accounts without
-modifying them:
+Assess, export, and verify the source:
 
 ```bash
-.venv/bin/drivershub-migrate preflight-target
+.venv/bin/drivershub-migrate export-all
 ```
 
-The AIO adapter reads MariaDB through `docker compose exec`. The generic adapter
-connects directly to MariaDB. Both write the same `target-preflight.json` and
-use the same migration rules. Neither assumes fixed IDs for the destination
-administrator. If the only destination account matches exactly one imported
-administrator by email, Discord ID, or Steam ID, the report proposes a merge.
-If no source administrator matches, it proposes new collision-free IDs that
-retain the bootstrap account as an accessible recovery administrator.
+The command is resumable. If it reports an incomplete export, correct the
+reported problem and run it again.
 
-The preflight also supports a freshly initialized destination on which source
-users have already registered. Every such destination account must match a
-different source account unambiguously by email, Discord ID, or Steam ID. One
-additional unmatched bootstrap account is allowed and is retained under new
-collision-free IDs as the recovery administrator. Missing, duplicate, or
-contradictory identity matches stop the import. This does not support merging
-arbitrary content from an already active destination Hub. No account is changed
-by the preflight command.
+### 2. Back up and prepare the destination
 
-### Preview the import
-
-After destination preflight, create a backup and stop every destination writer
-service. Then validate the complete planned import:
+Back up the destination before any import writes. For Docker AIO, stop the
+entire stack and archive the deployment directory, which contains the
+database, configuration, and uploaded assets:
 
 ```bash
-.venv/bin/drivershub-migrate dry-run-import
-```
-
-The command refreshes the destination preflight, builds the SQL for every
-import stage, and executes it against the real destination schema in one
-transaction that always ends with `ROLLBACK`. This validates data types,
-primary and unique keys, foreign keys, existing destination rows, schema
-compatibility, and dependencies between stages before the writing import
-starts. It also builds and validates the merged configuration and every
-branding asset without writing the configuration file.
-
-Before executing the transaction, the tool verifies that every affected table
-uses a transactional InnoDB-compatible storage engine and that none of those
-tables has a trigger with effects outside the simulated statements. Missing or
-non-transactional tables and triggers block the dry run. Temporary tables are
-used for the configuration rows whose normal insert allocates an automatic ID.
-This prevents the validation itself from consuming IDs or retaining data.
-
-The result is written to `import-dry-run.json`. A successful report contains
-`database_validation.state: ready`; any rejected statement blocks the import
-and includes the database error. When delivery details were not exported, the
-report also shows how many deliveries will initially use frontend-compatible
-placeholders. The validation can take a similar amount of database processing
-time as the actual import for a large migration, but commits no writes.
-
-For a direct MariaDB destination, add `--writers-stopped`. The AIO mode checks
-the Compose services automatically.
-
-### Import accounts
-
-The account stage is the first writing import stage. It preserves source UIDs
-and member IDs. A matching destination account keeps its destination password
-and MFA enrollment. The unmatched bootstrap administrator is moved to the
-recovery IDs shown by `preflight-target`. Imported users keep their
-Steam ID, Discord ID, email address, roles, profile, join timestamp, and
-selected tracker. Passwords and MFA secrets are not imported.
-
-Create and verify a destination backup. Then stop every service that can write
-to the Hub database while MariaDB remains running:
-
-```bash
-cd /path/to/DriversHubDockerAIO
-docker compose stop backend bannergen db-init
-cd /path/to/DriversHubMigrationTools
-.venv/bin/drivershub-migrate import-accounts --backup-confirmed
-```
-
-The command checks the service state, refreshes the destination preflight,
-writes all account changes in one UTC database transaction, and verifies the
-imported UIDs. It records completion in `import-journal.json` and refuses to
-repeat a completed account stage.
-
-When existing destination accounts are matched to source accounts, the later
-user-state stage replaces destination notes, role history, active bans, and ban
-history with the exported source state. This prevents technical history-ID
-collisions and avoids mixing temporary pre-migration state with source history.
-Passwords, MFA enrollment, and authentication connections are not part of
-these history tables and remain preserved.
-
-Do not restart the destination Hub after this command yet. The account stage
-does not import the remaining content, plugin data, economy data, or delivery
-history. Keep the writer services stopped until the remaining import stages
-have completed.
-
-For a direct MariaDB destination, stop all backend writers yourself and add
-`--writers-stopped` to the command. This is an explicit confirmation because
-the tool cannot inspect services outside the Docker AIO deployment.
-
-### Import configuration and branding
-
-Update the installed command after pulling a version that adds dependencies:
-
-```bash
-.venv/bin/python -m pip install -e .
-```
-
-With the destination writer services still stopped, import the portable Hub
-configuration and the exported branding assets:
-
-```bash
-.venv/bin/drivershub-migrate import-configuration
-```
-
-The source tracker configuration is not imported. The command also retains
-the destination values for Discord and OAuth, Steam, SMTP, captcha, MariaDB,
-Redis, webhooks, forwarding targets, and other destination integrations.
-Discord role mappings in imported roles, ranks, and applications
-use matching values already present in the destination configuration or remain
-empty when no destination mapping exists.
-
-The command imports the remaining portable backend settings, frontend
-appearance settings, logo, banner, and background image. It writes the JSON
-file atomically and updates frontend configuration and assets in one database
-transaction. Do not restart the Hub until all remaining import stages have
-completed.
-
-### Import user state
-
-With the destination writer services still stopped, import durable state that
-belongs to the imported accounts:
-
-```bash
-.venv/bin/drivershub-migrate import-user-state
-```
-
-This imports global user notes, active bans, ban history, and role history.
-Personal administrator notes cannot be attributed safely because the source
-API does not identify their author; the command reports and skips them by
-default. Set `DRIVERSHUB_CONVERT_PERSONAL_NOTES_TO_GLOBAL=true` only when you
-explicitly accept making every exported personal note visible as a global
-administrator note. If a user already has a global note, the converted note is
-appended with a clear `Migrated personal administrator note` label.
-Sessions, MFA enrolments, and transient activity records are not imported.
-
-### Import content
-
-Import the self-contained content resources while the destination writers
-remain stopped:
-
-```bash
-.venv/bin/drivershub-migrate import-content
-```
-
-This stage currently imports announcements and downloads, retaining their
-original IDs, authors, timestamps, ordering, visibility, and counters. Other
-plugin resources, economy data, and deliveries are handled by later stages.
-
-Import application records next:
-
-```bash
-.venv/bin/drivershub-migrate import-applications
-```
-
-This preserves application IDs, applicants, answers, decisions, responsible
-staff members, and original submission and response timestamps.
-
-Import event and challenge definitions next:
-
-```bash
-.venv/bin/drivershub-migrate import-events-challenges
-```
-
-Events retain attendance and votes. Challenge delivery links and completion
-records are deferred until their referenced deliveries have been imported.
-When an event's deleted creator is no longer identified by the source API, the
-record is retained with the Hub's unknown-user identifier.
-
-Import polls, exposed votes, and tasks next:
-
-```bash
-.venv/bin/drivershub-migrate import-polls-tasks
-```
-
-Poll definitions, choices, and visible voter identities are retained. The API
-does not expose original vote timestamps, so reconstructed votes use `0`.
-Tasks retain their current workflow state, assignments, notes, and exposed
-timestamps; their unavailable creation timestamp also uses `0`.
-
-### Import economy state
-
-Import the recoverable economy state next:
-
-```bash
-.venv/bin/drivershub-migrate import-economy
-```
-
-Current balances and transaction views are imported. The list API does not
-expose the original stored timestamp or internal transaction metadata, so
-these fields use `0` and `migration-import/pending-enrichment` as recognizable
-placeholders. Original transaction IDs, identifiable parties, amounts,
-balances, and visible messages remain available. The optional resumable
-enrichment operation documented below can retrieve the timestamps while the
-source Hub remains reachable.
-
-Import the exported economy inventory after balances and transactions:
-
-```bash
-.venv/bin/drivershub-migrate import-economy-inventory
-```
-
-This restores trucks, garage slots, and merchandise when present in the
-export. Garage-slot purchase prices and merchandise sale prices are not exposed
-by the source API and therefore use `0`; all exposed identifiers, ownership,
-state, and timestamps are retained.
-
-### Import baseline deliveries
-
-Import the delivery rows with verified Unix timestamps next:
-
-```bash
-.venv/bin/drivershub-migrate import-deliveries
-```
-
-The list API is the authoritative baseline when the independently collected
-CSV snapshot differs. Core delivery values and list metadata are preserved.
-The detail payload contains a recognizable, frontend-renderable placeholder and
-`dlog_meta.note` contains `migration-import/pending-detail-enrichment`. This
-keeps delivery pages usable while allowing optional detail backfill to identify
-and safely replace placeholders later.
-
-### Import dependent relationships
-
-After deliveries exist, restore their exported relationships:
-
-```bash
-.venv/bin/drivershub-migrate import-relationships
-```
-
-This restores challenge delivery records, challenge completions, and pending
-division requests. Every referenced delivery must exist in the baseline
-import. Where the source API omits a relationship timestamp, the referenced
-delivery's verified Unix timestamp is used; pending division requests remain
-explicitly unprocessed.
-
-### Verify and start the destination
-
-Keep the writer services stopped and verify the completed import against the
-destination database:
-
-```bash
-.venv/bin/drivershub-migrate verify-target
-```
-
-This compares the imported table counts with the completed stage journal and
-checks delivery, challenge, and division relationships for missing referenced
-records. It writes the detailed result to `target-verification.json`. Do not
-start the Hub when the command reports a mismatch or integrity violation.
-
-After a successful verification, start the Docker AIO services:
-
-```bash
-cd /path/to/DriversHubDockerAIO
+cd /opt/DriversHubDockerAIO
+docker compose down
+tar -czf /backup/drivershub-$(date +%Y%m%d).tar.gz -C /opt DriversHubDockerAIO
 docker compose up -d
 ```
 
+For a direct MariaDB destination, dump the database and copy the backend
+configuration:
+
+```bash
+mysqldump -u root -p drivershub > /backup/drivershub-$(date +%Y%m%d).sql
+cp /path/to/config.json /backup/config-$(date +%Y%m%d).json
+```
+
+After the backup, stop every service that can write to the Hub database while
+leaving MariaDB running. For Docker AIO:
+
+```bash
+docker compose stop backend bannergen db-init
+```
+
+If you want to proceed directly to the import, start only MariaDB after the
+backup instead of the full stack:
+
+```bash
+docker compose up -d db
+```
+
+This avoids restarting services you would stop again immediately.
+
+### 3. Import the migration
+
+Return to the Migration Tools directory and run:
+
+```bash
+.venv/bin/drivershub-migrate import-all --backup-confirmed
+```
+
+`--backup-confirmed` is required only when the workflow starts writing for the
+first time. If the command is interrupted, run it again; completed stages are
+skipped.
+
+For a direct MariaDB destination, also add `--writers-stopped` after stopping
+all destination writers yourself.
+
+### 4. Start and check the destination
+
+After a successful import, start the Docker AIO services:
+
+```bash
+cd /opt/DriversHubDockerAIO
+docker compose up -d
+```
+
+Verify administrator login, account claiming, configuration, branding, recent
+deliveries, applications, events, challenges, and economy balances in the Web
+UI. Keep the pre-import database backup until these checks are complete.
+
+## Exported and retained data
+
+The export includes backend and frontend configuration, branding assets,
+users, members, bans, supported standard-plugin content, divisions, delivery
+history, and exposed economy data. Content from a standard plugin is exported
+only when that plugin is enabled on the source Hub.
+
+Destination-specific database, Redis, Discord, Steam, SMTP, captcha, webhook,
+tracker, and OAuth values are retained. Imported users keep available Steam,
+Discord, TruckersMP, and email identities. Passwords, MFA enrollment, OAuth
+tokens, and sessions are not transferred.
+
+Set `DRIVERSHUB_CONVERT_PERSONAL_NOTES_TO_GLOBAL=true` to import personal
+administrator notes as global administrator notes. Otherwise they are skipped.
+
+## Reports and recovery
+
+The combined commands print their current stage and the next action. Detailed
+reports remain in the migration directory:
+
+- `assessment.json`: detected source capabilities
+- `export.json`: export coverage, counts, and failures
+- `import-plan.json`: account and configuration plan
+- `target-preflight.json`: destination accounts and mappings
+- `import-dry-run.json`: destination validation result
+- `import-journal.json`: completed import stages
+- `target-verification.json`: final counts and integrity checks
+
+When `export-all` reports an incomplete export, inspect `export.json` and run
+`export-all` again. When `import-all` stops before writing, inspect
+`target-preflight.json` and `import-dry-run.json`. After writing has begun,
+keep all destination writers stopped, inspect the reported stage in
+`import-journal.json`, correct the problem, and run `import-all` again.
+
+The individual commands used by the combined workflows remain available for
+targeted recovery:
+
+```text
+assess, export, verify, plan-import, preflight-target, dry-run-import,
+import-accounts, import-configuration, import-user-state, import-content,
+import-applications, import-events-challenges, import-polls-tasks,
+import-economy, import-economy-inventory, import-deliveries,
+import-relationships, verify-target
+```
+
+Run `drivershub-migrate COMMAND --help` for their options. Do not run an
+individual writing stage out of order.
+
 ## Post-migration enrichment
 
-Delivery-detail and economy-timestamp enrichment are supported post-migration
-operations. They are not required to start the migrated Hub, and the
-destination may remain online while they run. Both jobs are resumable: progress
-and source responses are stored below `enrichment/` in the migration directory,
-completed work is skipped, and destination rows are updated only while they
-still carry the exact migration marker. `--limit N` can restrict a run to `N`
-source requests. During a run, the commands show completed work, percentage,
-elapsed time, and an estimated remaining time.
+The destination may remain online during both optional jobs. They are
+resumable and show progress and an estimated remaining time. Use `--limit N`
+to restrict a run to `N` source requests.
 
 Delivery details and telemetry can be restored individually:
 
@@ -532,11 +221,8 @@ Delivery details and telemetry can be restored individually:
 .venv/bin/drivershub-migrate backfill-delivery-details
 ```
 
-Each detail requires a separate source request. A deleted or temporarily
-unavailable source delivery remains usable with its migration placeholder. A
-definitive `404` is marked
-`migration-import/detail-unavailable`; transient failures remain pending and
-can be retried later.
+Each detail requires a separate source request. Unavailable details retain a
+usable placeholder; temporary failures can be retried later.
 
 Economy transaction timestamps can be restored from the source CSV exports:
 
@@ -544,23 +230,9 @@ Economy transaction timestamps can be restored from the source CSV exports:
 .venv/bin/drivershub-migrate enrich-economy-transactions
 ```
 
-The transaction CSV contains local timestamps without a UTC offset. The tool
-derives the source server's offset automatically by matching each delivery's
-local `time_submitted` value from the delivery CSV with its Unix timestamp from
-the delivery list. Dates without an unambiguous delivery reference are not
-guessed and their transaction timestamps remain unavailable.
-
-The source endpoint allows only three requests per minute, so this job waits at
-least 20.5 seconds between requests and can take a long time. It also requires
-many requests for a Hub with numerous accounts and a long history. The source
-API does not expose the original internal transaction note. Successfully
-matched rows receive `migration-import/internal-note-unavailable`; after every
-source window has been checked, wholly unmatched rows are marked
-`migration-import/enrichment-unavailable` instead of remaining pending.
-
-Then verify login and account claiming, configuration and branding, recent
-deliveries, applications, events, challenges, and economy balances in the Web
-UI. Keep the pre-import database backup until these checks are complete.
+The source endpoint allows only three requests per minute. This job can
+therefore take a long time for a Hub with many accounts and a long history.
+Timestamps that cannot be matched unambiguously remain unavailable.
 
 ## License
 
@@ -569,13 +241,4 @@ Drivers Hub Migration Tools is developed by
 License v3.0 or later. See [LICENSE](LICENSE).
 
 Drivers Hub is a separate upstream project developed by
-[CharlesWithC](https://charlws.com). This repository contains migration tooling
-and does not redistribute the Drivers Hub applications.
-
-## Development
-
-Run the test suite with the Python standard library:
-
-```bash
-PYTHONPATH=src python3 -m unittest discover -s tests -v
-```
+[CharlesWithC](https://charlws.com).

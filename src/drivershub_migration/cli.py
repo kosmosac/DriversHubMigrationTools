@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 from pathlib import Path
 import sys
@@ -45,11 +44,6 @@ def parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path(".env"),
         help="configuration file (default: .env)",
-    )
-    result.add_argument(
-        "--json",
-        action="store_true",
-        help="write the complete machine-readable report to standard output",
     )
     commands = result.add_subparsers(dest="command", required=True)
     def common(command: argparse.ArgumentParser) -> None:
@@ -265,15 +259,12 @@ def main(argv: list[str] | None = None) -> int:
             )
         except (RuntimeError, ValueError) as exc:
             raise SystemExit(str(exc)) from exc
-        if args.json:
-            print(json.dumps(report, indent=2, ensure_ascii=False))
-        else:
-            verification = report.get("verification", {})
-            print("Source export workflow complete." if report["state"] == "complete" else "Source export workflow incomplete.")
-            print(f"Integrity: {verification.get('integrity', 'unknown')}")
-            print(f"Export: {verification.get('export', 'unknown')}")
-            print(f"Checked files: {verification.get('checked_files', 0)}")
-            print("Next: prepare the destination and run drivershub-migrate import-all --backup-confirmed." if report["state"] == "complete" else "Next: inspect export.json and rerun export-all to resume failed requests.")
+        verification = report.get("verification", {})
+        print("Source export workflow complete." if report["state"] == "complete" else "Source export workflow incomplete.")
+        print(f"Integrity: {verification.get('integrity', 'unknown')}")
+        print(f"Export: {verification.get('export', 'unknown')}")
+        print(f"Checked files: {verification.get('checked_files', 0)}")
+        print("Next: prepare the destination and run drivershub-migrate import-all --backup-confirmed." if report["state"] == "complete" else "Next: inspect export.json and rerun export-all to resume failed requests.")
         return 0 if report["state"] == "complete" else 1
 
     if args.command in {"verify", "plan-import"}:
@@ -291,13 +282,9 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError as exc:
             raise SystemExit(str(exc)) from exc
         print(
-            json.dumps(report, indent=2, ensure_ascii=False)
-            if args.json
-            else (
-                render_verification(report)
-                if args.command == "verify"
-                else render_import_plan(report, Path(output_value))
-            )
+            render_verification(report)
+            if args.command == "verify"
+            else render_import_plan(report, Path(output_value))
         )
         if args.command == "verify":
             return 0 if report["integrity"] == "valid" and report["export"] == "complete" else 1
@@ -526,14 +513,11 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(str(exc)) from exc
         if args.command == "import-all":
             verification = report.get("verification", {})
-            if args.json:
-                print(json.dumps(report, indent=2, ensure_ascii=False))
-            else:
-                print("Destination import workflow complete." if report.get("state") == "complete" else "Destination import workflow incomplete.")
-                print(f"Verified resource counts: {len(verification.get('expected', {}))}")
-                print(f"Count mismatches: {len(verification.get('count_mismatches', []))}")
-                print(f"Referential-integrity violations: {len(verification.get('integrity_violations', []))}")
-                print("Next: restart the destination Hub and perform the post-import checks." if report.get("state") == "complete" else "Next: inspect target-verification.json and rerun import-all after correcting the problem.")
+            print("Destination import workflow complete." if report.get("state") == "complete" else "Destination import workflow incomplete.")
+            print(f"Verified resource counts: {len(verification.get('expected', {}))}")
+            print(f"Count mismatches: {len(verification.get('count_mismatches', []))}")
+            print(f"Referential-integrity violations: {len(verification.get('integrity_violations', []))}")
+            print("Next: restart the destination Hub and perform the post-import checks." if report.get("state") == "complete" else "Next: inspect target-verification.json and rerun import-all after correcting the problem.")
             return 0 if report.get("state") == "complete" else 1
         if args.command == "backfill-delivery-details":
             print("Delivery detail backfill run complete.")
@@ -654,13 +638,9 @@ def main(argv: list[str] | None = None) -> int:
             print("Next: run drivershub-migrate import-deliveries while destination writers remain stopped.")
             return 0
         print(
-            json.dumps(report, indent=2, ensure_ascii=False)
-            if args.json
-            else (
-                render_target_preflight(report)
-                if args.command == "preflight-target"
-                else render_import_dry_run(report, Path(output_value))
-            )
+            render_target_preflight(report)
+            if args.command == "preflight-target"
+            else render_import_dry_run(report, Path(output_value))
         )
         if args.command == "preflight-target":
             return 0 if report["state"] in {"complete", "ready"} else 1
@@ -707,13 +687,9 @@ def main(argv: list[str] | None = None) -> int:
                 progress=progress,
             )
         print(
-            json.dumps(report, indent=2, ensure_ascii=False)
-            if args.json
-            else (
-                render_assessment(report, Path(output_value))
-                if args.command == "assess"
-                else render_export(report, Path(output_value))
-            )
+            render_assessment(report, Path(output_value))
+            if args.command == "assess"
+            else render_export(report, Path(output_value))
         )
         return 0
     return 2
