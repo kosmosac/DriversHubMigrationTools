@@ -306,6 +306,13 @@ compatibility, and dependencies between stages before the writing import
 starts. It also builds and validates the merged configuration and every
 branding asset without writing the configuration file.
 
+Before executing the transaction, the tool verifies that every affected table
+uses a transactional InnoDB-compatible storage engine and that none of those
+tables has a trigger with effects outside the simulated statements. Missing or
+non-transactional tables and triggers block the dry run. Temporary tables are
+used for the configuration rows whose normal insert allocates an automatic ID.
+This prevents the validation itself from consuming IDs or retaining data.
+
 The result is written to `import-dry-run.json`. A successful report contains
 `database_validation.state: ready`; any rejected statement blocks the import
 and includes the database error. When delivery details were not exported, the

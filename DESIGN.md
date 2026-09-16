@@ -385,6 +385,13 @@ rather than merely summarizing planned record counts. Generic SQL dump replay
 is not suitable because the source export is a logical API export, not a
 database dump.
 
+Rollback validation must first verify that every affected destination table
+uses a supported transactional storage engine. Triggers on affected tables are
+unsupported unless their behavior is explicitly understood and tested; the
+safe default is to block validation. Operations with non-transactional side
+effects, including automatic ID allocation used only by configuration rows,
+must run against session-local temporary tables instead of production tables.
+
 ### Destination configuration
 
 Portable source configuration must be merged into a fresh destination
