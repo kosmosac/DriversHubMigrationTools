@@ -40,7 +40,7 @@ class TargetPreflightTests(unittest.TestCase):
                 )
 
             result = preflight_target(migration, target, runner=runner)
-            self.assertEqual(result["state"], "action-required")
+            self.assertEqual(result["state"], "ready")
             self.assertEqual(result["collisions"][0]["fields"], ["userid"])
             self.assertEqual(result["bootstrap"]["action"], "retain-as-recovery-account")
             self.assertEqual(result["bootstrap"]["replacement_uid"], 8)

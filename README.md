@@ -56,26 +56,32 @@ After creating a destination backup and stopping all destination writer
 services, run every writing stage in this order:
 
 ```bash
-.venv/bin/drivershub-migrate import-accounts --approve --backup-confirmed
-.venv/bin/drivershub-migrate import-configuration --approve --backup-confirmed
-.venv/bin/drivershub-migrate import-user-state --approve --backup-confirmed
-.venv/bin/drivershub-migrate import-content --approve --backup-confirmed
-.venv/bin/drivershub-migrate import-applications --approve --backup-confirmed
-.venv/bin/drivershub-migrate import-events-challenges --approve --backup-confirmed
-.venv/bin/drivershub-migrate import-polls-tasks --approve --backup-confirmed
-.venv/bin/drivershub-migrate import-economy --approve --backup-confirmed
-.venv/bin/drivershub-migrate import-economy-inventory --approve --backup-confirmed
-.venv/bin/drivershub-migrate import-deliveries --approve --backup-confirmed
-.venv/bin/drivershub-migrate import-relationships --approve --backup-confirmed
+.venv/bin/drivershub-migrate import-accounts --backup-confirmed
+.venv/bin/drivershub-migrate import-configuration
+.venv/bin/drivershub-migrate import-user-state
+.venv/bin/drivershub-migrate import-content
+.venv/bin/drivershub-migrate import-applications
+.venv/bin/drivershub-migrate import-events-challenges
+.venv/bin/drivershub-migrate import-polls-tasks
+.venv/bin/drivershub-migrate import-economy
+.venv/bin/drivershub-migrate import-economy-inventory
+.venv/bin/drivershub-migrate import-deliveries
+.venv/bin/drivershub-migrate import-relationships
 .venv/bin/drivershub-migrate verify-target
 ```
+
+`preflight-target` either produces a supported plan or blocks the import with
+specific conflicts that must be corrected. It does not require a separate
+approval. `--backup-confirmed` is supplied once when the first writing stage
+starts; completion of each stage in `import-journal.json` authorizes the next
+dependent stage.
 
 After successful verification, start the destination Hub. The optional,
 resumable enrichment jobs may run while it is online:
 
 ```bash
-.venv/bin/drivershub-migrate backfill-delivery-details --approve
-.venv/bin/drivershub-migrate enrich-economy-transactions --approve
+.venv/bin/drivershub-migrate backfill-delivery-details
+.venv/bin/drivershub-migrate enrich-economy-transactions
 ```
 
 The sections below describe prerequisites, effects, limitations, and recovery
@@ -162,31 +168,22 @@ access and currently exports:
 - announcements, applications, challenges, downloads, events, polls, and tasks;
 - division definitions and pending division validations;
 - deliveries as an unchanged CSV export and a normalized JSON representation;
-- Economy configuration and account balances; vehicle, garage, merchandise,
-  transaction, and garage-slot data are included with source-side effects enabled.
+- Economy configuration, account balances, vehicles, garages, merchandise,
+  transactions, and garage slots.
 
-Accepted members, detailed profiles, role history, and ban history are
-available when `DRIVERSHUB_ALLOW_SOURCE_SIDE_EFFECTS=true` is set in `.env`.
-The relevant list and profile requests update the requesting administrator's
-activity in the source Hub. They therefore require explicit approval and are
-disabled by default.
-
-Announcements, applications, challenges, downloads, events, and polls also
-update administrator activity. Their list and detail exports use the same
-explicit approval. Task content and pending division validations do not require
-this approval. Plugin content is exported only when the frontend configuration
-reports that the corresponding standard plugin is enabled.
+Plugin content is exported only when the frontend configuration reports that
+the corresponding standard plugin is enabled.
 
 The upstream transaction endpoint reports inconsistent totals for some
 transaction types. The exporter therefore reads each account until an actual
 empty page and deduplicates the result by transaction ID.
 
-With the same approval, the exporter also collects the paginated delivery list.
-Individual delivery details require the separate
-`DRIVERSHUB_ALLOW_DELIVERY_VIEW_UPDATES=true` setting because each request
-increments that delivery's view counter. The safe default therefore exports the
-CSV and, when activity updates are allowed, the JSON list without requesting
-these detail views.
+The exporter collects the delivery CSV and paginated delivery list by default.
+Set `DRIVERSHUB_EXPORT_DELIVERY_DETAILS=true` only when the initial export
+should also retrieve every individual delivery payload. This can require one
+request per delivery and take many hours on a large Hub. Leaving it disabled
+does not prevent migration: frontend-compatible placeholders are imported and
+the resumable detail backfill can replace them later.
 
 `DRIVERSHUB_REQUEST_INTERVAL` controls the minimum delay between requests. The
 default value of `1.1` seconds stays below the limit of 60 requests per minute
@@ -323,7 +320,7 @@ to the Hub database while MariaDB remains running:
 cd /path/to/DriversHubDockerAIO
 docker compose stop backend bannergen db-init
 cd /path/to/DriversHubMigrationTools
-.venv/bin/drivershub-migrate import-accounts --approve --backup-confirmed
+.venv/bin/drivershub-migrate import-accounts --backup-confirmed
 ```
 
 The command checks the service state, refreshes the destination preflight,
@@ -359,9 +356,7 @@ With the destination writer services still stopped, import the portable Hub
 configuration and the exported branding assets:
 
 ```bash
-.venv/bin/drivershub-migrate import-configuration \
-  --approve \
-  --backup-confirmed
+.venv/bin/drivershub-migrate import-configuration
 ```
 
 The source tracker configuration is not imported. The command also retains
@@ -383,9 +378,7 @@ With the destination writer services still stopped, import durable state that
 belongs to the imported accounts:
 
 ```bash
-.venv/bin/drivershub-migrate import-user-state \
-  --approve \
-  --backup-confirmed
+.venv/bin/drivershub-migrate import-user-state
 ```
 
 This imports global user notes, active bans, ban history, and role history.
@@ -403,9 +396,7 @@ Import the self-contained content resources while the destination writers
 remain stopped:
 
 ```bash
-.venv/bin/drivershub-migrate import-content \
-  --approve \
-  --backup-confirmed
+.venv/bin/drivershub-migrate import-content
 ```
 
 This stage currently imports announcements and downloads, retaining their
@@ -415,9 +406,7 @@ plugin resources, economy data, and deliveries are handled by later stages.
 Import application records next:
 
 ```bash
-.venv/bin/drivershub-migrate import-applications \
-  --approve \
-  --backup-confirmed
+.venv/bin/drivershub-migrate import-applications
 ```
 
 This preserves application IDs, applicants, answers, decisions, responsible
@@ -426,9 +415,7 @@ staff members, and original submission and response timestamps.
 Import event and challenge definitions next:
 
 ```bash
-.venv/bin/drivershub-migrate import-events-challenges \
-  --approve \
-  --backup-confirmed
+.venv/bin/drivershub-migrate import-events-challenges
 ```
 
 Events retain attendance and votes. Challenge delivery links and completion
@@ -439,9 +426,7 @@ record is retained with the Hub's unknown-user identifier.
 Import polls, exposed votes, and tasks next:
 
 ```bash
-.venv/bin/drivershub-migrate import-polls-tasks \
-  --approve \
-  --backup-confirmed
+.venv/bin/drivershub-migrate import-polls-tasks
 ```
 
 Poll definitions, choices, and visible voter identities are retained. The API
@@ -454,9 +439,7 @@ timestamps; their unavailable creation timestamp also uses `0`.
 Import the recoverable economy state next:
 
 ```bash
-.venv/bin/drivershub-migrate import-economy \
-  --approve \
-  --backup-confirmed
+.venv/bin/drivershub-migrate import-economy
 ```
 
 Current balances and transaction views are imported. The list API does not
@@ -470,9 +453,7 @@ source Hub remains reachable.
 Import the exported economy inventory after balances and transactions:
 
 ```bash
-.venv/bin/drivershub-migrate import-economy-inventory \
-  --approve \
-  --backup-confirmed
+.venv/bin/drivershub-migrate import-economy-inventory
 ```
 
 This restores trucks, garage slots, and merchandise when present in the
@@ -485,9 +466,7 @@ state, and timestamps are retained.
 Import the delivery rows with verified Unix timestamps next:
 
 ```bash
-.venv/bin/drivershub-migrate import-deliveries \
-  --approve \
-  --backup-confirmed
+.venv/bin/drivershub-migrate import-deliveries
 ```
 
 The list API is the authoritative baseline when the independently collected
@@ -502,9 +481,7 @@ and safely replace placeholders later.
 After deliveries exist, restore their exported relationships:
 
 ```bash
-.venv/bin/drivershub-migrate import-relationships \
-  --approve \
-  --backup-confirmed
+.venv/bin/drivershub-migrate import-relationships
 ```
 
 This restores challenge delivery records, challenge completions, and pending
@@ -548,20 +525,19 @@ elapsed time, and an estimated remaining time.
 Delivery details and telemetry can be restored individually:
 
 ```bash
-.venv/bin/drivershub-migrate backfill-delivery-details --approve
+.venv/bin/drivershub-migrate backfill-delivery-details
 ```
 
-This requires `DRIVERSHUB_ALLOW_DELIVERY_VIEW_UPDATES=true`, because every
-detail request increments the corresponding delivery's view counter on the
-source Hub. A deleted or temporarily unavailable source delivery remains
-usable with its migration placeholder. A definitive `404` is marked
+Each detail requires a separate source request. A deleted or temporarily
+unavailable source delivery remains usable with its migration placeholder. A
+definitive `404` is marked
 `migration-import/detail-unavailable`; transient failures remain pending and
 can be retried later.
 
 Economy transaction timestamps can be restored from the source CSV exports:
 
 ```bash
-.venv/bin/drivershub-migrate enrich-economy-transactions --approve
+.venv/bin/drivershub-migrate enrich-economy-transactions
 ```
 
 The transaction CSV contains local timestamps without a UTC offset. The tool

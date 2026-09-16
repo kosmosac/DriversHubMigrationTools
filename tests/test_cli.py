@@ -28,8 +28,6 @@ class CliTests(unittest.TestCase):
                     "--env-file",
                     str(env),
                     "import-user-state",
-                    "--approve",
-                    "--backup-confirmed",
                 ]
             )
 

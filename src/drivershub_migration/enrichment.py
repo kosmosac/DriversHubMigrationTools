@@ -72,13 +72,11 @@ def _base(source: str) -> str:
 
 def backfill_delivery_details(
     directory: Path, target_directory: Path | None, *, source: str, token: str,
-    mode: str, database: dict[str, object], approved: bool, allow_view_updates: bool,
+    mode: str, database: dict[str, object],
     request_interval: float, limit: int | None = None,
     progress: Callable[[str], None] | None = None,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> dict[str, object]:
-    if not approved or not allow_view_updates:
-        raise ValueError("Delivery backfill requires --approve and DRIVERSHUB_ALLOW_DELIVERY_VIEW_UPDATES=true")
     _import_complete(directory, "deliveries")
     rows = query_rows(
         "SELECT d.logid,d.isdelivered,d.unit FROM dlog d JOIN dlog_meta m ON m.logid=d.logid "
@@ -260,13 +258,11 @@ def _csv_timestamp(value: str, offsets: dict[str, int]) -> int | None:
 
 def enrich_economy_transactions(
     directory: Path, target_directory: Path | None, *, source: str, token: str,
-    mode: str, database: dict[str, object], approved: bool,
+    mode: str, database: dict[str, object],
     limit: int | None = None,
     progress: Callable[[str], None] | None = None,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> dict[str, object]:
-    if not approved:
-        raise ValueError("Economy enrichment requires --approve")
     _import_complete(directory, "economy")
     offsets = _source_offsets(directory)
     if not offsets:

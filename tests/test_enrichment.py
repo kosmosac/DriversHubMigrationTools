@@ -86,7 +86,7 @@ class EnrichmentTests(unittest.TestCase):
             ):
                 report = backfill_delivery_details(
                     directory, Path("/target"), source="https://source/api", token="token",
-                    mode="aio", database={}, approved=True, allow_view_updates=True,
+                    mode="aio", database={},
                     request_interval=0,
                 )
             self.assertEqual(report["state"], "complete")
@@ -116,7 +116,7 @@ class EnrichmentTests(unittest.TestCase):
             ):
                 report = enrich_economy_transactions(
                     directory, Path("/target"), source="https://source/api", token="token",
-                    mode="aio", database={}, approved=True,
+                    mode="aio", database={},
                     limit=1,
                 )
             self.assertEqual(report["attempted_windows"], 1)

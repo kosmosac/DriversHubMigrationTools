@@ -11,9 +11,7 @@ from .relationship_import import build_relationship_stage
 from .storage import write_json
 
 
-def import_relationships(directory: Path, target_directory: Path | None, *, mode: str, database: dict[str, object], approved: bool, backup_confirmed: bool, writers_stopped: bool, runner=subprocess.run) -> dict[str, object]:
-    if not approved or not backup_confirmed:
-        raise ValueError("The relationship import requires --approve and --backup-confirmed")
+def import_relationships(directory: Path, target_directory: Path | None, *, mode: str, database: dict[str, object], writers_stopped: bool, runner=subprocess.run) -> dict[str, object]:
     path = directory / "import-journal.json"
     try:
         journal = json.loads(path.read_text(encoding="utf-8"))

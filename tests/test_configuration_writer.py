@@ -81,8 +81,6 @@ class ConfigurationWriterTests(unittest.TestCase):
                 None,
                 mode="aio",
                 database={},
-                approved=True,
-                backup_confirmed=True,
                 writers_stopped=False,
                 runner=runner,
             )

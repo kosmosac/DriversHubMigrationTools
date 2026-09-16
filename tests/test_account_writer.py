@@ -11,7 +11,7 @@ class AccountWriterTests(unittest.TestCase):
     @patch("drivershub_migration.account_writer.build_account_stage")
     @patch("drivershub_migration.account_writer.preflight_target")
     def test_writes_aio_transaction_once(self, preflight, build):
-        preflight.return_value = {"state": "action-required"}
+        preflight.return_value = {"state": "ready"}
         build.return_value = (
             "SET time_zone = '+00:00';\nSTART TRANSACTION;\nCOMMIT;\n",
             {"inserted_accounts": 3, "merged_accounts": 0},
@@ -46,7 +46,6 @@ class AccountWriterTests(unittest.TestCase):
                 target,
                 mode="aio",
                 database={},
-                approved=True,
                 backup_confirmed=True,
                 writers_stopped=False,
                 runner=runner,
@@ -60,7 +59,7 @@ class AccountWriterTests(unittest.TestCase):
 
     @patch("drivershub_migration.account_writer.preflight_target")
     def test_refuses_running_backend(self, preflight):
-        preflight.return_value = {"state": "action-required"}
+        preflight.return_value = {"state": "ready"}
 
         def runner(command, **kwargs):
             return type("Result", (), {"stdout": "mariadb\nbackend\n"})()
@@ -72,7 +71,6 @@ class AccountWriterTests(unittest.TestCase):
                     Path(temporary),
                     mode="aio",
                     database={},
-                    approved=True,
                     backup_confirmed=True,
                     writers_stopped=False,
                     runner=runner,

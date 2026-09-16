@@ -70,8 +70,6 @@ Every exported resource must receive one of these classifications:
    source detail is missing.
 3. **Record only**: The data is useful as a record but is not safe to import.
 4. **Unavailable**: The source API does not expose the data.
-5. **Source side effect**: Collection changes source state and requires
-   explicit operator approval.
 
 The final report must preserve these classifications. It must not describe a
 reconstructed or incomplete resource as a lossless migration.
@@ -141,7 +139,7 @@ Before collection, the exporter must:
 - report which endpoints accept the dedicated application token and which need
   an administrator session;
 - show unavailable resources before the export starts;
-- show all known source-side effects;
+- show unavailable source data and failed requests;
 - estimate the number of paginated requests where possible.
 
 Preflight must not change the source configuration or content.
@@ -178,16 +176,9 @@ The current API has no complete Hub export endpoint. The exporter must combine
 many paginated lists, detail endpoints, configuration endpoints, and asset
 downloads.
 
-HTTP GET does not always mean that the source remains unchanged:
-
-- `GET /dlog/{logid}` increments the delivery view counter.
-- Some authenticated list operations update the administrator's activity. The
-  exporter must not send authentication to public endpoints that do not
-  require it.
-
-Bulk delivery-detail collection must be disabled by default. The operator must
-explicitly accept the view-counter changes before the exporter uses that
-endpoint for all deliveries.
+Bulk delivery-detail collection is disabled by default because it requires one
+request per delivery and can take many hours on a large Hub. Operators can
+enable it for the initial export or use the resumable post-migration backfill.
 
 The delivery detail response includes telemetry and most of the stored tracker
 payload, but it removes the embedded driver object. The CSV export contains a
@@ -241,7 +232,7 @@ must be measured during preflight.
 | Personal notes and personal settings | User-specific or incomplete | Notes are skipped by default; explicit operator approval can convert exported personal notes into global notes |
 | Role and ban history | Partly exposed through profiles | Best effort; verify pagination and limits |
 | Current bans | Administrator ban endpoints | Usually complete |
-| Deliveries | Lists and CSV export; detail endpoint has side effects | Baseline import from list and CSV; optional richer import from delivery details |
+| Deliveries | Lists and CSV export; details require one request per delivery | Baseline import from list and CSV; optional richer import from delivery details |
 | Deleted deliveries | Not exposed | Unavailable |
 | Derived delivery statistics | Summary APIs only | Reports, not complete internal state |
 | Announcements | List and detail endpoints | Usually complete |
@@ -268,7 +259,7 @@ The exporter creates a versioned directory with:
 - binary branding assets as separate files;
 - delivery CSV files and optional delivery-detail records;
 - pagination metadata, expected totals, and collected totals;
-- warnings, HTTP failures, unavailable fields, and source-side effects;
+- warnings, HTTP failures, and unavailable fields;
 - a checksum for every exported file.
 
 Credentials supplied to authenticate the exporter must not be included. The
@@ -661,13 +652,13 @@ The importer must:
 
 The following manual checkpoints are appropriate:
 
-- approval of the generated configuration diff;
+- review of the generated configuration diff;
 - entry of destination secrets and external service credentials;
-- confirmation of identity conflicts;
+- resolution of identity conflicts reported as unsupported;
 - creation and verification of the emergency administrator;
 - confirmation that the destination backup exists;
 - confirmation that destination writer services are stopped;
-- approval of the final import plan and cutover.
+- confirmation that the destination backup exists before the first writing stage.
 
 Routine pagination, downloads, checksums, reference mapping, database inserts,
 and verification queries should remain automated.

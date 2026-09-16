@@ -181,7 +181,6 @@ def _export_profiles(
         "path": str(normalized_path.relative_to(output)),
         "sha256": sha256(normalized_path.read_bytes()),
         "failures": failures,
-        "source_side_effect": "Updates the requesting administrator's activity.",
     }
 
 
@@ -377,7 +376,6 @@ def _export_economy(
     output: Path,
     client: HttpClient,
     journal: WorkJournal,
-    allow_source_side_effects: bool,
 ) -> dict[str, object]:
     result: dict[str, object] = {
         "state": "partial",
@@ -390,90 +388,27 @@ def _export_economy(
         ("merch", "economy/merch/list", {"order_by": "itemid", "order": "asc"}),
     )
     for name, relative_url, query in inventories:
-        if allow_source_side_effects:
-            result[name] = export_paginated(
-                name=f"economy-{name}",
-                source=source,
-                relative_url=relative_url,
-                output=output,
-                client=client,
-                journal=journal,
-                query=query,
-            )
-            result[name]["source_side_effect"] = (
-                "Updates the requesting administrator's activity."
-            )
-        else:
-            result[name] = {
-                "state": "skipped",
-                "reason": "Set DRIVERSHUB_ALLOW_SOURCE_SIDE_EFFECTS=true to permit this request.",
-                "source_side_effect": "Updates the requesting administrator's activity.",
-            }
-    if allow_source_side_effects:
-        balance_records = _normalized_records(output, "economy-balances")
-        userids = sorted(
-            {
-                record["userid"]
-                for record in balance_records
-                if isinstance(record, dict) and isinstance(record.get("userid"), int)
-            }
+        result[name] = export_paginated(
+            name=f"economy-{name}", source=source, relative_url=relative_url,
+            output=output, client=client, journal=journal, query=query,
         )
-        result["transactions"] = _export_partitioned_pages(
-            name="economy-transactions",
-            source=source,
-            partitions=[
-                (f"userid-{userid}", f"economy/balance/{userid}/transactions/list", None)
-                for userid in userids
-            ],
-            output=output,
-            client=client,
-            journal=journal,
-            deduplicate_by="txid",
-        )
-        result["transactions"]["source_side_effect"] = (
-            "Updates the requesting administrator's activity."
-        )
-        garage_records = _normalized_records(output, "economy-garages")
-        garageids = sorted(
-            {
-                str(record["garageid"])
-                for record in garage_records
-                if isinstance(record, dict) and record.get("garageid") is not None
-            }
-        )
-        result["garage_slots"] = _export_partitioned_pages(
-            name="economy-garage-slots",
-            source=source,
-            partitions=[
-                (
-                    f"garage-{index}",
-                    f"economy/garages/{quote(garageid, safe='')}/slots/list",
-                    garageid,
-                )
-                for index, garageid in enumerate(garageids, start=1)
-            ],
-            output=output,
-            client=client,
-            journal=journal,
-            deduplicate_by="slotid",
-            partition_field="garageid",
-            page_size=250,
-        )
-        result["garage_slots"]["source_side_effect"] = (
-            "Updates the requesting administrator's activity."
-        )
-        states = [
-            result[key]["state"]
-            for key in ("balances", "trucks", "garages", "merch", "transactions", "garage_slots")
-        ]
-        result["state"] = "complete" if all(state == "complete" for state in states) else "incomplete"
-    else:
-        for key in ("transactions", "garage_slots"):
-            result[key] = {
-                "state": "skipped",
-                "reason": "Set DRIVERSHUB_ALLOW_SOURCE_SIDE_EFFECTS=true to permit these requests.",
-                "source_side_effect": "Updates the requesting administrator's activity.",
-            }
+    balance_records = _normalized_records(output, "economy-balances")
+    userids = sorted({record["userid"] for record in balance_records if isinstance(record, dict) and isinstance(record.get("userid"), int)})
+    result["transactions"] = _export_partitioned_pages(
+        name="economy-transactions", source=source,
+        partitions=[(f"userid-{userid}", f"economy/balance/{userid}/transactions/list", None) for userid in userids],
+        output=output, client=client, journal=journal, deduplicate_by="txid",
+    )
+    garage_records = _normalized_records(output, "economy-garages")
+    garageids = sorted({str(record["garageid"]) for record in garage_records if isinstance(record, dict) and record.get("garageid") is not None})
+    result["garage_slots"] = _export_partitioned_pages(
+        name="economy-garage-slots", source=source,
+        partitions=[(f"garage-{index}", f"economy/garages/{quote(garageid, safe='')}/slots/list", garageid) for index, garageid in enumerate(garageids, start=1)],
+        output=output, client=client, journal=journal, deduplicate_by="slotid",
+        partition_field="garageid", page_size=250,
+    )
+    states = [result[key]["state"] for key in ("balances", "trucks", "garages", "merch", "transactions", "garage_slots")]
+    result["state"] = "complete" if all(state == "complete" for state in states) else "incomplete"
     return result
 
 
@@ -484,19 +419,11 @@ def _export_plugins(
     client: HttpClient,
     journal: WorkJournal,
     enabled_plugins: list[str],
-    allow_source_side_effects: bool,
 ) -> dict[str, object]:
     results: dict[str, object] = {}
     for plugin, name, list_url, id_key, detail_url, query, has_side_effect in PLUGIN_RESOURCES:
         if plugin not in enabled_plugins:
             results[plugin] = {"state": "disabled"}
-            continue
-        if has_side_effect and not allow_source_side_effects:
-            results[plugin] = {
-                "state": "skipped",
-                "reason": "Set DRIVERSHUB_ALLOW_SOURCE_SIDE_EFFECTS=true to permit these requests.",
-                "source_side_effect": "Updates the requesting administrator's activity.",
-            }
             continue
         listing = export_paginated(
             name=name,
@@ -531,10 +458,6 @@ def _export_plugins(
             plugin_result["state"] = "complete"
         else:
             plugin_result["state"] = "incomplete"
-        if has_side_effect:
-            plugin_result["source_side_effect"] = (
-                "Updates the requesting administrator's activity."
-            )
         results[plugin] = plugin_result
 
     if "division" in enabled_plugins:
@@ -571,8 +494,7 @@ def export_source(
     token: str,
     *,
     request_interval: float = 1.1,
-    allow_source_side_effects: bool = False,
-    allow_delivery_view_updates: bool = False,
+    export_delivery_details: bool = False,
     progress: Callable[[str], None] | None = None,
 ) -> dict[str, object]:
     source = normalize_api_url(source)
@@ -630,14 +552,7 @@ def export_source(
             assets[name] = value
 
     resources: dict[str, object] = {}
-    for name, relative_url, query, source_side_effect in PAGINATED_RESOURCES:
-        if source_side_effect and not allow_source_side_effects:
-            resources[name] = {
-                "state": "skipped",
-                "reason": "Set DRIVERSHUB_ALLOW_SOURCE_SIDE_EFFECTS=true to permit this request.",
-                "source_side_effect": source_side_effect,
-            }
-            continue
+    for name, relative_url, query, _ in PAGINATED_RESOURCES:
         resources[name] = export_paginated(
             name=name,
             source=source,
@@ -647,22 +562,7 @@ def export_source(
             journal=journal,
             query=query,
         )
-        if source_side_effect:
-            resources[name]["source_side_effect"] = source_side_effect
-
-    if allow_source_side_effects:
-        resources["profiles"] = _export_profiles(
-            source,
-            output,
-            client,
-            journal,
-        )
-    else:
-        resources["profiles"] = {
-            "state": "skipped",
-            "reason": "Set DRIVERSHUB_ALLOW_SOURCE_SIDE_EFFECTS=true to permit profile requests.",
-            "source_side_effect": "Updates the requesting administrator's activity.",
-        }
+    resources["profiles"] = _export_profiles(source, output, client, journal)
 
     plugin_resources = _export_plugins(
         source=source,
@@ -670,7 +570,6 @@ def export_source(
         client=client,
         journal=journal,
         enabled_plugins=capabilities["standard_plugins"],
-        allow_source_side_effects=allow_source_side_effects,
     )
     if "economy" in capabilities["standard_plugins"]:
         plugin_resources["economy"] = _export_economy(
@@ -678,7 +577,6 @@ def export_source(
             output=output,
             client=client,
             journal=journal,
-            allow_source_side_effects=allow_source_side_effects,
         )
     else:
         plugin_resources["economy"] = {"state": "disabled"}
@@ -686,63 +584,23 @@ def export_source(
     deliveries: dict[str, object] = {
         "csv": _export_delivery_csv(source, output, client, journal),
     }
-    if allow_source_side_effects:
-        deliveries["list"] = export_paginated(
-            name="deliveries",
-            source=source,
-            relative_url="dlog/list",
-            output=output,
-            client=client,
-            journal=journal,
-            query={"order_by": "logid", "order": "asc"},
-            allow_growth=True,
+    deliveries["list"] = export_paginated(
+        name="deliveries", source=source, relative_url="dlog/list", output=output,
+        client=client, journal=journal, query={"order_by": "logid", "order": "asc"},
+        allow_growth=True,
+    )
+    if deliveries["list"]["state"] == "complete" and export_delivery_details:
+        deliveries["details"] = export_details(
+            name="deliveries", id_key="logid", records=_normalized_records(output, "deliveries"),
+            url_for=lambda identifier: urljoin(source, f"dlog/{identifier}"),
+            output=output, client=client, journal=journal,
         )
-        if (
-            deliveries["list"]["state"] == "complete"
-            and allow_delivery_view_updates
-        ):
-            deliveries["details"] = export_details(
-                name="deliveries",
-                id_key="logid",
-                records=_normalized_records(output, "deliveries"),
-                url_for=lambda identifier: urljoin(source, f"dlog/{identifier}"),
-                output=output,
-                client=client,
-                journal=journal,
-            )
-            deliveries["details"]["source_side_effect"] = (
-                "Increments the view counter of every requested delivery and updates "
-                "the requesting administrator's activity."
-            )
-        elif deliveries["list"]["state"] != "complete":
-            deliveries["details"] = {
-                "state": "skipped",
-                "reason": "The delivery list export is incomplete.",
-            }
-        else:
-            deliveries["details"] = {
-                "state": "skipped",
-                "reason": (
-                    "Set DRIVERSHUB_ALLOW_DELIVERY_VIEW_UPDATES=true to permit "
-                    "delivery detail requests."
-                ),
-                "source_side_effect": (
-                    "Increments the view counter of every requested delivery."
-                ),
-            }
-        deliveries["list"]["source_side_effect"] = (
-            "Updates the requesting administrator's activity."
-        )
+    elif deliveries["list"]["state"] != "complete":
+        deliveries["details"] = {"state": "skipped", "reason": "The delivery list export is incomplete."}
     else:
-        deliveries["list"] = {
-            "state": "skipped",
-            "reason": "Set DRIVERSHUB_ALLOW_SOURCE_SIDE_EFFECTS=true to permit this request.",
-            "source_side_effect": "Updates the requesting administrator's activity.",
-        }
         deliveries["details"] = {
             "state": "skipped",
-            "reason": "Set DRIVERSHUB_ALLOW_SOURCE_SIDE_EFFECTS=true to permit these requests.",
-            "source_side_effect": "Increments the view counter of every requested delivery.",
+            "reason": "Set DRIVERSHUB_EXPORT_DELIVERY_DETAILS=true to include the long-running detail export.",
         }
 
     report = {

@@ -115,7 +115,6 @@ def parser() -> argparse.ArgumentParser:
     )
     account_command.add_argument("--output", type=Path)
     account_command.add_argument("--target", type=Path)
-    account_command.add_argument("--approve", action="store_true")
     account_command.add_argument("--backup-confirmed", action="store_true")
     account_command.add_argument("--writers-stopped", action="store_true")
     configuration_command = commands.add_parser(
@@ -125,64 +124,48 @@ def parser() -> argparse.ArgumentParser:
     configuration_command.add_argument("--output", type=Path)
     configuration_command.add_argument("--target", type=Path)
     configuration_command.add_argument("--config-path", type=Path)
-    configuration_command.add_argument("--approve", action="store_true")
-    configuration_command.add_argument("--backup-confirmed", action="store_true")
     configuration_command.add_argument("--writers-stopped", action="store_true")
     user_state_command = commands.add_parser(
         "import-user-state", help="Import notes, bans, and role history"
     )
     user_state_command.add_argument("--output", type=Path)
     user_state_command.add_argument("--target", type=Path)
-    user_state_command.add_argument("--approve", action="store_true")
-    user_state_command.add_argument("--backup-confirmed", action="store_true")
     user_state_command.add_argument("--writers-stopped", action="store_true")
     content_command = commands.add_parser(
         "import-content", help="Import self-contained Hub content"
     )
     content_command.add_argument("--output", type=Path)
     content_command.add_argument("--target", type=Path)
-    content_command.add_argument("--approve", action="store_true")
-    content_command.add_argument("--backup-confirmed", action="store_true")
     content_command.add_argument("--writers-stopped", action="store_true")
     applications_command = commands.add_parser(
         "import-applications", help="Import application records"
     )
     applications_command.add_argument("--output", type=Path)
     applications_command.add_argument("--target", type=Path)
-    applications_command.add_argument("--approve", action="store_true")
-    applications_command.add_argument("--backup-confirmed", action="store_true")
     applications_command.add_argument("--writers-stopped", action="store_true")
     event_command = commands.add_parser(
         "import-events-challenges", help="Import event and challenge definitions"
     )
     event_command.add_argument("--output", type=Path)
     event_command.add_argument("--target", type=Path)
-    event_command.add_argument("--approve", action="store_true")
-    event_command.add_argument("--backup-confirmed", action="store_true")
     event_command.add_argument("--writers-stopped", action="store_true")
     economy_command = commands.add_parser(
         "import-economy", help="Import losslessly recoverable economy state"
     )
     economy_command.add_argument("--output", type=Path)
     economy_command.add_argument("--target", type=Path)
-    economy_command.add_argument("--approve", action="store_true")
-    economy_command.add_argument("--backup-confirmed", action="store_true")
     economy_command.add_argument("--writers-stopped", action="store_true")
     delivery_command = commands.add_parser(
         "import-deliveries", help="Import baseline delivery history"
     )
     delivery_command.add_argument("--output", type=Path)
     delivery_command.add_argument("--target", type=Path)
-    delivery_command.add_argument("--approve", action="store_true")
-    delivery_command.add_argument("--backup-confirmed", action="store_true")
     delivery_command.add_argument("--writers-stopped", action="store_true")
     relationship_command = commands.add_parser(
         "import-relationships", help="Import delivery-dependent relationships"
     )
     relationship_command.add_argument("--output", type=Path)
     relationship_command.add_argument("--target", type=Path)
-    relationship_command.add_argument("--approve", action="store_true")
-    relationship_command.add_argument("--backup-confirmed", action="store_true")
     relationship_command.add_argument("--writers-stopped", action="store_true")
     final_command = commands.add_parser(
         "verify-target", help="Verify the completed import in the stopped destination"
@@ -200,8 +183,6 @@ def parser() -> argparse.ArgumentParser:
     for command in (polls_tasks_command, economy_inventory_command):
         command.add_argument("--output", type=Path)
         command.add_argument("--target", type=Path)
-        command.add_argument("--approve", action="store_true")
-        command.add_argument("--backup-confirmed", action="store_true")
         command.add_argument("--writers-stopped", action="store_true")
     delivery_backfill = commands.add_parser(
         "backfill-delivery-details",
@@ -215,7 +196,6 @@ def parser() -> argparse.ArgumentParser:
         command.add_argument("--source")
         command.add_argument("--output", type=Path)
         command.add_argument("--target", type=Path)
-        command.add_argument("--approve", action="store_true")
         command.add_argument(
             "--limit", type=int,
             help="maximum source requests in this run; omit to process all remaining work",
@@ -316,8 +296,6 @@ def main(argv: list[str] | None = None) -> int:
                     report = backfill_delivery_details(
                         Path(output_value), Path(target_value) if target_value else None,
                         source=source, token=token, mode=target_mode, database=database,
-                        approved=args.approve,
-                        allow_view_updates=boolean_setting("DRIVERSHUB_ALLOW_DELIVERY_VIEW_UPDATES"),
                         request_interval=float(setting("DRIVERSHUB_REQUEST_INTERVAL") or "1.1"),
                         limit=args.limit, progress=progress,
                     )
@@ -325,7 +303,7 @@ def main(argv: list[str] | None = None) -> int:
                     report = enrich_economy_transactions(
                         Path(output_value), Path(target_value) if target_value else None,
                         source=source, token=token,
-                        mode=target_mode, database=database, approved=args.approve,
+                        mode=target_mode, database=database,
                         limit=args.limit, progress=progress,
                     )
             elif args.command == "import-accounts":
@@ -341,7 +319,6 @@ def main(argv: list[str] | None = None) -> int:
                         "database": setting("DRIVERSHUB_TARGET_DB_NAME"),
                         "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET"),
                     },
-                    approved=args.approve,
                     backup_confirmed=args.backup_confirmed,
                     writers_stopped=args.writers_stopped,
                 )
@@ -363,8 +340,6 @@ def main(argv: list[str] | None = None) -> int:
                         "database": setting("DRIVERSHUB_TARGET_DB_NAME"),
                         "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET"),
                     },
-                    approved=args.approve,
-                    backup_confirmed=args.backup_confirmed,
                     writers_stopped=args.writers_stopped,
                 )
             elif args.command == "import-user-state":
@@ -380,8 +355,6 @@ def main(argv: list[str] | None = None) -> int:
                         "database": setting("DRIVERSHUB_TARGET_DB_NAME"),
                         "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET"),
                     },
-                    approved=args.approve,
-                    backup_confirmed=args.backup_confirmed,
                     writers_stopped=args.writers_stopped,
                     convert_personal_notes_to_global=boolean_setting(
                         "DRIVERSHUB_CONVERT_PERSONAL_NOTES_TO_GLOBAL"
@@ -399,8 +372,6 @@ def main(argv: list[str] | None = None) -> int:
                         "database": setting("DRIVERSHUB_TARGET_DB_NAME"),
                         "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET"),
                     },
-                    approved=args.approve,
-                    backup_confirmed=args.backup_confirmed,
                     writers_stopped=args.writers_stopped,
                 )
             elif args.command == "import-applications":
@@ -415,8 +386,6 @@ def main(argv: list[str] | None = None) -> int:
                         "database": setting("DRIVERSHUB_TARGET_DB_NAME"),
                         "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET"),
                     },
-                    approved=args.approve,
-                    backup_confirmed=args.backup_confirmed,
                     writers_stopped=args.writers_stopped,
                 )
             elif args.command == "import-events-challenges":
@@ -427,7 +396,7 @@ def main(argv: list[str] | None = None) -> int:
                         "host": setting("DRIVERSHUB_TARGET_DB_HOST"), "port": setting("DRIVERSHUB_TARGET_DB_PORT"),
                         "user": setting("DRIVERSHUB_TARGET_DB_USER"), "password": setting("DRIVERSHUB_TARGET_DB_PASSWORD"),
                         "database": setting("DRIVERSHUB_TARGET_DB_NAME"), "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET"),
-                    }, approved=args.approve, backup_confirmed=args.backup_confirmed,
+                    },
                     writers_stopped=args.writers_stopped,
                 )
             elif args.command == "import-economy":
@@ -435,7 +404,6 @@ def main(argv: list[str] | None = None) -> int:
                     Path(output_value), Path(target_value) if target_value else None,
                     mode=target_mode,
                     database={"host": setting("DRIVERSHUB_TARGET_DB_HOST"), "port": setting("DRIVERSHUB_TARGET_DB_PORT"), "user": setting("DRIVERSHUB_TARGET_DB_USER"), "password": setting("DRIVERSHUB_TARGET_DB_PASSWORD"), "database": setting("DRIVERSHUB_TARGET_DB_NAME"), "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET")},
-                    approved=args.approve, backup_confirmed=args.backup_confirmed,
                     writers_stopped=args.writers_stopped,
                 )
             elif args.command == "import-deliveries":
@@ -443,7 +411,6 @@ def main(argv: list[str] | None = None) -> int:
                     Path(output_value), Path(target_value) if target_value else None,
                     mode=target_mode,
                     database={"host": setting("DRIVERSHUB_TARGET_DB_HOST"), "port": setting("DRIVERSHUB_TARGET_DB_PORT"), "user": setting("DRIVERSHUB_TARGET_DB_USER"), "password": setting("DRIVERSHUB_TARGET_DB_PASSWORD"), "database": setting("DRIVERSHUB_TARGET_DB_NAME"), "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET")},
-                    approved=args.approve, backup_confirmed=args.backup_confirmed,
                     writers_stopped=args.writers_stopped,
                 )
             elif args.command == "import-relationships":
@@ -451,7 +418,6 @@ def main(argv: list[str] | None = None) -> int:
                     Path(output_value), Path(target_value) if target_value else None,
                     mode=target_mode,
                     database={"host": setting("DRIVERSHUB_TARGET_DB_HOST"), "port": setting("DRIVERSHUB_TARGET_DB_PORT"), "user": setting("DRIVERSHUB_TARGET_DB_USER"), "password": setting("DRIVERSHUB_TARGET_DB_PASSWORD"), "database": setting("DRIVERSHUB_TARGET_DB_NAME"), "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET")},
-                    approved=args.approve, backup_confirmed=args.backup_confirmed,
                     writers_stopped=args.writers_stopped,
                 )
             elif args.command == "verify-target":
@@ -467,7 +433,6 @@ def main(argv: list[str] | None = None) -> int:
                     Path(output_value), Path(target_value) if target_value else None,
                     mode=target_mode,
                     database={"host": setting("DRIVERSHUB_TARGET_DB_HOST"), "port": setting("DRIVERSHUB_TARGET_DB_PORT"), "user": setting("DRIVERSHUB_TARGET_DB_USER"), "password": setting("DRIVERSHUB_TARGET_DB_PASSWORD"), "database": setting("DRIVERSHUB_TARGET_DB_NAME"), "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET")},
-                    approved=args.approve, backup_confirmed=args.backup_confirmed,
                     writers_stopped=args.writers_stopped,
                 )
             else:
@@ -515,14 +480,14 @@ def main(argv: list[str] | None = None) -> int:
             print("Account import complete.")
             print(f"Imported accounts: {accounts.get('inserted_accounts', 0)}")
             print(f"Merged accounts: {accounts.get('merged_accounts', 0)}")
-            print("Next: run drivershub-migrate import-configuration --approve --backup-confirmed while destination writers remain stopped.")
+            print("Next: run drivershub-migrate import-configuration while destination writers remain stopped.")
             return 0
         if args.command == "import-configuration":
             print("Configuration import complete.")
             print(f"Portable backend values: {report.get('portable_backend_values', 0)}")
             print(f"Branding assets: {report.get('branding_assets', 0)}")
             print("Destination infrastructure and integration settings retained: yes")
-            print("Next: run drivershub-migrate import-user-state --approve --backup-confirmed while destination writers remain stopped.")
+            print("Next: run drivershub-migrate import-user-state while destination writers remain stopped.")
             return 0
         if args.command == "import-user-state":
             print("User-state import complete.")
@@ -532,19 +497,19 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Active bans: {report.get('active_bans', 0)}")
             print(f"Ban-history records: {report.get('ban_history_records', 0)}")
             print(f"Personal administrator notes skipped: {report.get('personal_notes_skipped', 0)}")
-            print("Next: run drivershub-migrate import-content --approve --backup-confirmed while destination writers remain stopped.")
+            print("Next: run drivershub-migrate import-content while destination writers remain stopped.")
             return 0
         if args.command == "import-content":
             print("Content import complete.")
             for name, count in report.get("resources", {}).items():
                 print(f"{name.replace('_', ' ').title()}: {count}")
-            print("Next: run drivershub-migrate import-applications --approve --backup-confirmed while destination writers remain stopped.")
+            print("Next: run drivershub-migrate import-applications while destination writers remain stopped.")
             return 0
         if args.command == "import-applications":
             print("Application import complete.")
             print(f"Applications: {report.get('applications', 0)}")
             print(f"Pending applications: {report.get('pending_applications', 0)}")
-            print("Next: run drivershub-migrate import-events-challenges --approve --backup-confirmed while destination writers remain stopped.")
+            print("Next: run drivershub-migrate import-events-challenges while destination writers remain stopped.")
             return 0
         if args.command == "import-events-challenges":
             print("Event and challenge import complete.")
@@ -552,7 +517,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Events: {report.get('events', 0)}")
             print(f"Events with unavailable original creator: {report.get('event_creators_unavailable', 0)}")
             print(f"Challenge delivery links deferred: {report.get('challenge_delivery_links_deferred', 0)}")
-            print("Next: run drivershub-migrate import-polls-tasks --approve --backup-confirmed while destination writers remain stopped.")
+            print("Next: run drivershub-migrate import-polls-tasks while destination writers remain stopped.")
             return 0
         if args.command == "import-economy":
             print("Economy import complete.")
@@ -561,7 +526,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Transactions pending optional enrichment: {report.get('transactions_pending_enrichment', 0)}")
             print(f"Transactions without identifiable parties: {report.get('transactions_without_identifiable_party', 0)}")
             print("Missing source timestamps and internal metadata use recognizable placeholders.")
-            print("Next: run drivershub-migrate import-economy-inventory --approve --backup-confirmed while destination writers remain stopped.")
+            print("Next: run drivershub-migrate import-economy-inventory while destination writers remain stopped.")
             return 0
         if args.command == "import-deliveries":
             print("Baseline delivery import complete.")
@@ -570,7 +535,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Deliveries without CSV metadata: {report.get('missing_csv_metadata', 0)}")
             print(f"Duplicate CSV rows ignored: {report.get('duplicate_csv_rows_ignored', 0)}")
             print(f"CSV-only rows without safe timestamps not imported: {report.get('csv_only_rows_not_imported', 0)}")
-            print("Next: run drivershub-migrate import-relationships --approve --backup-confirmed while destination writers remain stopped.")
+            print("Next: run drivershub-migrate import-relationships while destination writers remain stopped.")
             return 0
         if args.command == "import-relationships":
             print("Relationship import complete.")
@@ -596,14 +561,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Poll choices: {report.get('poll_choices', 0)}")
             print(f"Poll votes: {report.get('poll_votes', 0)}")
             print(f"Tasks: {report.get('tasks', 0)}")
-            print("Next: run drivershub-migrate import-economy --approve --backup-confirmed while destination writers remain stopped.")
+            print("Next: run drivershub-migrate import-economy while destination writers remain stopped.")
             return 0
         if args.command == "import-economy-inventory":
             print("Economy inventory import complete.")
             print(f"Trucks: {report.get('trucks', 0)}")
             print(f"Garage slots: {report.get('garage_slots', 0)}")
             print(f"Merchandise items: {report.get('merchandise', 0)}")
-            print("Next: run drivershub-migrate import-deliveries --approve --backup-confirmed while destination writers remain stopped.")
+            print("Next: run drivershub-migrate import-deliveries while destination writers remain stopped.")
             return 0
         print(
             json.dumps(report, indent=2, ensure_ascii=False)
@@ -615,7 +580,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
         if args.command == "preflight-target":
-            return 0 if report["state"] in {"complete", "action-required"} else 1
+            return 0 if report["state"] in {"complete", "ready"} else 1
         return 0 if report["state"] == "ready" else 1
 
     if args.command in {"assess", "export"}:
@@ -653,11 +618,8 @@ def main(argv: list[str] | None = None) -> int:
                 Path(output_value),
                 token,
                 request_interval=request_interval,
-                allow_source_side_effects=boolean_setting(
-                    "DRIVERSHUB_ALLOW_SOURCE_SIDE_EFFECTS"
-                ),
-                allow_delivery_view_updates=boolean_setting(
-                    "DRIVERSHUB_ALLOW_DELIVERY_VIEW_UPDATES"
+                export_delivery_details=boolean_setting(
+                    "DRIVERSHUB_EXPORT_DELIVERY_DETAILS"
                 ),
                 progress=progress,
             )

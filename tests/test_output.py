@@ -76,7 +76,7 @@ class HumanOutputTests(unittest.TestCase):
     def test_target_preflight_explains_bootstrap_review(self):
         text = render_target_preflight(
             {
-                "state": "action-required",
+                "state": "ready",
                 "target_mode": "aio",
                 "source_accounts": 3,
                 "target_accounts": [{"uid": 1}],
@@ -95,18 +95,18 @@ class HumanOutputTests(unittest.TestCase):
         self.assertIn("Recovery UID: 1 -> 1900", text)
         self.assertIn("Recovery member ID: 1 -> 1493", text)
         self.assertIn("run drivershub-migrate dry-run-import", text)
-        self.assertIn("import-accounts --approve", text)
+        self.assertIn("used automatically", text)
 
     def test_target_conflict_explains_that_no_override_exists(self):
         text = render_target_preflight(
             {
-                "state": "action-required",
+                "state": "ready",
                 "target_mode": "aio",
                 "source_accounts": 3,
                 "target_accounts": [{"uid": 1}, {"uid": 2}],
                 "collisions": [],
                 "bootstrap": {
-                    "state": "manual-decision-required",
+                    "state": "blocked",
                     "conflicts": [{"target_uid": 2}],
                 },
             }

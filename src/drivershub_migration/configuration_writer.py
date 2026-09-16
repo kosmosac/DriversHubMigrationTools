@@ -158,13 +158,9 @@ def import_configuration(
     *,
     mode: str,
     database: dict[str, object],
-    approved: bool,
-    backup_confirmed: bool,
     writers_stopped: bool,
     runner=subprocess.run,
 ) -> dict[str, object]:
-    if not approved or not backup_confirmed:
-        raise ValueError("The configuration import requires --approve and --backup-confirmed")
     journal_path = directory / "import-journal.json"
     journal = _read_object(journal_path, "import journal")
     if journal.get("stages", {}).get("accounts", {}).get("state") != "complete":

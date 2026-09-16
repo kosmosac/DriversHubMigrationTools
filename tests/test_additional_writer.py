@@ -31,8 +31,6 @@ class AdditionalWriterTests(unittest.TestCase):
                     None,
                     mode="mariadb",
                     database={},
-                    approved=True,
-                    backup_confirmed=True,
                     writers_stopped=True,
                 )
         execute.assert_called_once()

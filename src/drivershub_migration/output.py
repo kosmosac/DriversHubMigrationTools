@@ -143,7 +143,7 @@ def render_target_preflight(report: dict[str, object]) -> str:
         lines.append(
             "Next: inspect target-preflight.json. If the generated account mapping "
             "and recovery IDs are correct, run drivershub-migrate dry-run-import. "
-            "The later import-accounts --approve option accepts this generated action."
+            "A supported plan is used automatically when import-accounts starts."
         )
     else:
         lines.append(
@@ -202,7 +202,7 @@ def render_import_dry_run(report: dict[str, object], directory: Path) -> str:
     lines.append(
         "Next: inspect import-dry-run.json. If it is correct, create a destination "
         "backup, stop writer services, then run drivershub-migrate import-accounts "
-        "--approve --backup-confirmed."
+        "--backup-confirmed."
         if ready
         else (
             "Import cannot continue. Inspect the blocked stage in import-dry-run.json, "

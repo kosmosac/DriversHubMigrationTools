@@ -109,7 +109,7 @@ def _bootstrap_resolution(
             )
         if conflicts:
             return {
-                "state": "manual-decision-required",
+                "state": "blocked",
                 "reason": "Not every destination account has a unique source identity match.",
                 "matches": actions,
                 "conflicts": conflicts,
@@ -177,7 +177,7 @@ def _bootstrap_resolution(
         }
     if len(matches) > 1:
         return {
-            "state": "manual-decision-required",
+            "state": "blocked",
             "reason": "Bootstrap identities match different source administrators.",
             "candidate_source_uids": sorted(matches),
         }
@@ -328,18 +328,18 @@ def preflight_target(
 
     report = {
         "format_version": 1,
-        "state": "action-required" if target_accounts else "complete",
+        "state": "ready" if target_accounts else "complete",
         "target_mode": mode,
         "target": target_description,
         "source_accounts": len(source_accounts),
         "target_accounts": target_accounts,
         "collisions": collisions,
         "bootstrap": _bootstrap_resolution(source_accounts, target_accounts),
-        "required_action": (
-            "Accept the generated account action with import-accounts --approve, "
-            "or correct the source/destination identities and run preflight-target again."
+        "next_step": (
+            "Run dry-run-import, then start the supported account import with "
+            "import-accounts --backup-confirmed."
             if target_accounts
-            else None
+            else "Run dry-run-import."
         ),
     }
     write_json(migration_directory / "target-preflight.json", report)

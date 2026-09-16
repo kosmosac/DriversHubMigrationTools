@@ -200,13 +200,10 @@ def import_accounts(
     *,
     mode: str,
     database: dict[str, object],
-    approved: bool,
     backup_confirmed: bool,
     writers_stopped: bool,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> dict[str, object]:
-    if not approved:
-        raise ValueError("The account import requires --approve")
     if not backup_confirmed:
         raise ValueError("The account import requires --backup-confirmed")
     _ensure_not_complete(migration_directory)
