@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import math
 from base64 import b64encode
 from pathlib import Path
+
+from .storage import read_object
 
 
 TRACKER_IDS = {
@@ -56,16 +57,6 @@ USERID_REFERENCES = {
 }
 
 
-def _read_object(path: Path, description: str) -> dict[str, object]:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ValueError(f"Unable to read {description}") from exc
-    if not isinstance(value, dict):
-        raise ValueError(f"The {description} is not an object")
-    return value
-
-
 def _sql_value(value: object) -> str:
     if value is None:
         return "NULL"
@@ -97,7 +88,7 @@ def _integer(value: object, field: str, *, optional: bool = False) -> int | None
 
 
 def _profile_rows(directory: Path) -> list[dict[str, object]]:
-    document = _read_object(
+    document = read_object(
         directory / "normalized" / "profiles.json", "normalized profiles"
     )
     records = document.get("records")
@@ -205,10 +196,10 @@ def _move_existing_account(
 
 def build_account_stage(directory: Path) -> tuple[str, dict[str, object]]:
     """Return a single UTC transaction and a non-sensitive stage summary."""
-    preflight = _read_object(
+    preflight = read_object(
         directory / "target-preflight.json", "destination preflight"
     )
-    plan = _read_object(directory / "import-plan.json", "import plan")
+    plan = read_object(directory / "import-plan.json", "import plan")
     bootstrap = preflight.get("bootstrap")
     if not isinstance(bootstrap, dict) or bootstrap.get("state") not in {
         "ready",

@@ -47,6 +47,16 @@ def write_json(path: Path, value: Any) -> None:
     atomic_write(path, (json.dumps(value, indent=2, ensure_ascii=False) + "\n").encode())
 
 
+def read_object(path: Path, description: str) -> dict[str, object]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Unable to read {description}") from exc
+    if not isinstance(value, dict):
+        raise ValueError(f"The {description} is not an object")
+    return value
+
+
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 

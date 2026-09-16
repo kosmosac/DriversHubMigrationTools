@@ -11,17 +11,7 @@ from urllib.parse import urlparse
 from .account_import import _sql_value
 from .account_writer import _check_aio_writers, _execute_aio, _execute_mariadb
 from .configuration_plan import create_configuration_plan
-from .storage import atomic_write, write_json
-
-
-def _read_object(path: Path, description: str) -> dict[str, object]:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ValueError(f"Unable to read {description}") from exc
-    if not isinstance(value, dict):
-        raise ValueError(f"The {description} is not an object")
-    return value
+from .storage import atomic_write, read_object, write_json
 
 
 def _merge_backend(source: dict[str, object], target: dict[str, object]) -> dict[str, object]:
@@ -162,7 +152,7 @@ def import_configuration(
     runner=subprocess.run,
 ) -> dict[str, object]:
     journal_path = directory / "import-journal.json"
-    journal = _read_object(journal_path, "import journal")
+    journal = read_object(journal_path, "import journal")
     if journal.get("stages", {}).get("accounts", {}).get("state") != "complete":
         raise ValueError("Import accounts before configuration")
     if journal.get("stages", {}).get("configuration", {}).get("state") == "complete":
@@ -183,7 +173,7 @@ def import_configuration(
     else:
         raise ValueError("DRIVERSHUB_TARGET_MODE must be aio or mariadb")
 
-    target_config = _read_object(destination_config, "destination backend configuration")
+    target_config = read_object(destination_config, "destination backend configuration")
     plan = create_configuration_plan(directory)
     backend_plan = plan.get("backend", {})
     portable = backend_plan.get("portable", {}) if isinstance(backend_plan, dict) else {}

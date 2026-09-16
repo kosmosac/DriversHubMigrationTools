@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import json
 from copy import deepcopy
 from pathlib import Path
+
+from .storage import read_object
 
 
 DESTINATION_BACKEND_FIELDS = {
@@ -86,26 +87,16 @@ BRANDING_KEY_FIELDS = {
 }
 
 
-def _read_object(path: Path, description: str) -> dict[str, object]:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ValueError(f"The export does not contain valid {description}") from exc
-    if not isinstance(value, dict):
-        raise ValueError(f"The exported {description} is not an object")
-    return value
-
-
 def create_configuration_plan(directory: Path) -> dict[str, object]:
-    backend_document = _read_object(
+    backend_document = read_object(
         directory / "raw" / "assessment" / "backend-config.json",
         "backend configuration",
     )
-    client_config = _read_object(
+    client_config = read_object(
         directory / "raw" / "assessment" / "client-config.json",
         "frontend configuration",
     )
-    export = _read_object(directory / "export.json", "export manifest")
+    export = read_object(directory / "export.json", "export manifest")
 
     backend_config = backend_document.get("config")
     if not isinstance(backend_config, dict):

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 import re
 import subprocess
@@ -20,20 +19,11 @@ from .economy_inventory_import import build_economy_inventory_stage
 from .event_challenge_import import build_event_challenge_stage
 from .poll_task_import import build_poll_task_stage
 from .relationship_import import build_relationship_stage
+from .storage import read_object
 from .user_state_import import build_user_state_stage
 
 
 TRANSACTIONAL_ENGINES = {"INNODB", "XTRADB"}
-
-
-def _read_object(path: Path, description: str) -> dict[str, object]:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ValueError(f"Unable to read {description}") from exc
-    if not isinstance(value, dict):
-        raise ValueError(f"The {description} is not an object")
-    return value
 
 
 def _transaction_body(sql: str) -> list[str]:
@@ -44,7 +34,7 @@ def _transaction_body(sql: str) -> list[str]:
 def _configuration_validation(
     directory: Path, destination_config: Path
 ) -> tuple[dict[str, object], str]:
-    target = _read_object(destination_config, "destination backend configuration")
+    target = read_object(destination_config, "destination backend configuration")
     plan = create_configuration_plan(directory)
     backend = plan.get("backend", {})
     portable = backend.get("portable", {}) if isinstance(backend, dict) else {}

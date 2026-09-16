@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import csv
 from pathlib import Path
 import subprocess
 from typing import Callable
 
-from .storage import write_json
+from .storage import read_object, write_json
 from .target import preflight_target
 from .import_validation import validate_import
 
@@ -26,7 +25,7 @@ def _validate_delivery_timestamps(
     if not isinstance(relative_path, str):
         return False, 0, 0, "The delivery list has no normalized data path."
     try:
-        payload = _read_object(
+        payload = read_object(
             migration_directory / relative_path, "normalized delivery list"
         )
     except ValueError as exc:
@@ -103,16 +102,6 @@ def _delivery_timestamp_policy(
     }
 
 
-def _read_object(path: Path, description: str) -> dict[str, object]:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ValueError(f"Unable to read {description}") from exc
-    if not isinstance(value, dict):
-        raise ValueError(f"The {description} is not an object")
-    return value
-
-
 def _items(value: object) -> int:
     return value.get("items", 0) if isinstance(value, dict) and isinstance(value.get("items", 0), int) else 0
 
@@ -175,8 +164,8 @@ def create_import_dry_run(
         database=database,
         runner=runner,
     )
-    plan = _read_object(migration_directory / "import-plan.json", "import plan")
-    export = _read_object(migration_directory / "export.json", "export manifest")
+    plan = read_object(migration_directory / "import-plan.json", "import plan")
+    export = read_object(migration_directory / "export.json", "export manifest")
 
     bootstrap = target.get("bootstrap", {})
     bootstrap_ready = isinstance(bootstrap, dict) and bootstrap.get("state") in {
