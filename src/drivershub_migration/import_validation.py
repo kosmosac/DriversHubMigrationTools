@@ -55,7 +55,6 @@ def _configuration_validation(
     # generated to validate its values but is not executed because the settings
     # insert uses an implicit auto-increment value that a rollback cannot undo.
     sql, assets = _database_sql(directory, plan, merged)
-    json.dumps(merged, indent=4, ensure_ascii=False)
     return {
         "state": "ready",
         "portable_backend_values": len(portable),

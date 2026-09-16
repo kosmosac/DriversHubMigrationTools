@@ -245,7 +245,10 @@ def main(argv: list[str] | None = None) -> int:
                 "export-all requires DRIVERSHUB_SOURCE_URL, "
                 "DRIVERSHUB_MIGRATION_DIRECTORY, and DRIVERSHUB_APPLICATION_TOKEN"
             )
-        request_interval = float(setting("DRIVERSHUB_REQUEST_INTERVAL") or "1.1")
+        try:
+            request_interval = float(setting("DRIVERSHUB_REQUEST_INTERVAL") or "1.1")
+        except ValueError as exc:
+            raise SystemExit("DRIVERSHUB_REQUEST_INTERVAL must be a number") from exc
         if request_interval < 0:
             raise SystemExit("DRIVERSHUB_REQUEST_INTERVAL must not be negative")
         try:
