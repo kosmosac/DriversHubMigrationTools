@@ -515,14 +515,14 @@ def main(argv: list[str] | None = None) -> int:
             print("Account import complete.")
             print(f"Imported accounts: {accounts.get('inserted_accounts', 0)}")
             print(f"Merged accounts: {accounts.get('merged_accounts', 0)}")
-            print("Next: keep destination writer services stopped for the remaining import stages.")
+            print("Next: run drivershub-migrate import-configuration --approve --backup-confirmed while destination writers remain stopped.")
             return 0
         if args.command == "import-configuration":
             print("Configuration import complete.")
             print(f"Portable backend values: {report.get('portable_backend_values', 0)}")
             print(f"Branding assets: {report.get('branding_assets', 0)}")
             print("Destination infrastructure and integration settings retained: yes")
-            print("Next: keep destination writer services stopped for the remaining import stages.")
+            print("Next: run drivershub-migrate import-user-state --approve --backup-confirmed while destination writers remain stopped.")
             return 0
         if args.command == "import-user-state":
             print("User-state import complete.")
@@ -532,19 +532,19 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Active bans: {report.get('active_bans', 0)}")
             print(f"Ban-history records: {report.get('ban_history_records', 0)}")
             print(f"Personal administrator notes skipped: {report.get('personal_notes_skipped', 0)}")
-            print("Next: keep destination writer services stopped for the remaining import stages.")
+            print("Next: run drivershub-migrate import-content --approve --backup-confirmed while destination writers remain stopped.")
             return 0
         if args.command == "import-content":
             print("Content import complete.")
             for name, count in report.get("resources", {}).items():
                 print(f"{name.replace('_', ' ').title()}: {count}")
-            print("Next: keep destination writer services stopped for the remaining import stages.")
+            print("Next: run drivershub-migrate import-applications --approve --backup-confirmed while destination writers remain stopped.")
             return 0
         if args.command == "import-applications":
             print("Application import complete.")
             print(f"Applications: {report.get('applications', 0)}")
             print(f"Pending applications: {report.get('pending_applications', 0)}")
-            print("Next: keep destination writer services stopped for the remaining import stages.")
+            print("Next: run drivershub-migrate import-events-challenges --approve --backup-confirmed while destination writers remain stopped.")
             return 0
         if args.command == "import-events-challenges":
             print("Event and challenge import complete.")
@@ -552,7 +552,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Events: {report.get('events', 0)}")
             print(f"Events with unavailable original creator: {report.get('event_creators_unavailable', 0)}")
             print(f"Challenge delivery links deferred: {report.get('challenge_delivery_links_deferred', 0)}")
-            print("Next: import polls and tasks while destination writers remain stopped.")
+            print("Next: run drivershub-migrate import-polls-tasks --approve --backup-confirmed while destination writers remain stopped.")
             return 0
         if args.command == "import-economy":
             print("Economy import complete.")
@@ -561,7 +561,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Transactions pending optional enrichment: {report.get('transactions_pending_enrichment', 0)}")
             print(f"Transactions without identifiable parties: {report.get('transactions_without_identifiable_party', 0)}")
             print("Missing source timestamps and internal metadata use recognizable placeholders.")
-            print("Next: import the remaining economy inventory.")
+            print("Next: run drivershub-migrate import-economy-inventory --approve --backup-confirmed while destination writers remain stopped.")
             return 0
         if args.command == "import-deliveries":
             print("Baseline delivery import complete.")
@@ -570,14 +570,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Deliveries without CSV metadata: {report.get('missing_csv_metadata', 0)}")
             print(f"Duplicate CSV rows ignored: {report.get('duplicate_csv_rows_ignored', 0)}")
             print(f"CSV-only rows without safe timestamps not imported: {report.get('csv_only_rows_not_imported', 0)}")
-            print("Next: keep destination writer services stopped while relationships are imported.")
+            print("Next: run drivershub-migrate import-relationships --approve --backup-confirmed while destination writers remain stopped.")
             return 0
         if args.command == "import-relationships":
             print("Relationship import complete.")
             print(f"Challenge delivery links: {report.get('challenge_delivery_links', 0)}")
             print(f"Challenge completions: {report.get('challenge_completions', 0)}")
             print(f"Pending division requests: {report.get('pending_division_requests', 0)}")
-            print("Next: keep destination writer services stopped until final verification completes.")
+            print("Next: run drivershub-migrate verify-target while destination writers remain stopped.")
             return 0
         if args.command == "verify-target":
             print("Destination verification complete.")
@@ -586,7 +586,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Count mismatches: {len(report.get('count_mismatches', []))}")
             print(f"Referential-integrity violations: {len(report.get('integrity_violations', {}))}")
             if report.get("state") == "complete":
-                print("Next: restart the destination Hub and perform the post-import checks below.")
+                print("Next: restart the destination Hub, then verify administrator login, account claims, configuration, branding, and representative imported records.")
                 return 0
             print("Do not restart destination writer services; inspect target-verification.json.")
             return 1
@@ -596,14 +596,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Poll choices: {report.get('poll_choices', 0)}")
             print(f"Poll votes: {report.get('poll_votes', 0)}")
             print(f"Tasks: {report.get('tasks', 0)}")
-            print("Next: import economy state while destination writers remain stopped.")
+            print("Next: run drivershub-migrate import-economy --approve --backup-confirmed while destination writers remain stopped.")
             return 0
         if args.command == "import-economy-inventory":
             print("Economy inventory import complete.")
             print(f"Trucks: {report.get('trucks', 0)}")
             print(f"Garage slots: {report.get('garage_slots', 0)}")
             print(f"Merchandise items: {report.get('merchandise', 0)}")
-            print("Next: import baseline deliveries while destination writers remain stopped.")
+            print("Next: run drivershub-migrate import-deliveries --approve --backup-confirmed while destination writers remain stopped.")
             return 0
         print(
             json.dumps(report, indent=2, ensure_ascii=False)

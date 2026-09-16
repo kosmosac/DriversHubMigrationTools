@@ -336,7 +336,8 @@ def preflight_target(
         "collisions": collisions,
         "bootstrap": _bootstrap_resolution(source_accounts, target_accounts),
         "required_action": (
-            "Approve or change the proposed bootstrap account action before import."
+            "Accept the generated account action with import-accounts --approve, "
+            "or correct the source/destination identities and run preflight-target again."
             if target_accounts
             else None
         ),

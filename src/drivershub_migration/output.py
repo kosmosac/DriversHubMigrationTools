@@ -78,7 +78,11 @@ def render_import_plan(report: dict[str, object], directory: Path) -> str:
     lines.append(
         "Next: configure the destination and run drivershub-migrate preflight-target."
         if complete
-        else "Next: inspect conflicts in import-plan.json and resolve them before continuing."
+        else (
+            "Import cannot continue. Inspect conflicts in import-plan.json, correct "
+            "the duplicate source identities, then export and plan again. No conflict "
+            "override is supported."
+        )
     )
     return "\n".join(lines)
 
@@ -136,9 +140,17 @@ def render_target_preflight(report: dict[str, object]) -> str:
     if state == "complete":
         lines.append("Next: the destination is ready for an import dry run.")
     elif isinstance(bootstrap, dict) and bootstrap.get("state") == "ready":
-        lines.append("Next: review and approve the proposed bootstrap action in target-preflight.json.")
+        lines.append(
+            "Next: inspect target-preflight.json. If the generated account mapping "
+            "and recovery IDs are correct, run drivershub-migrate dry-run-import. "
+            "The later import-accounts --approve option accepts this generated action."
+        )
     else:
-        lines.append("Next: resolve the destination decisions listed in target-preflight.json.")
+        lines.append(
+            "Import cannot continue. Inspect target-preflight.json, correct ambiguous "
+            "or unmatched identities in the source or destination, then run "
+            "drivershub-migrate preflight-target again. No manual mapping override is supported."
+        )
     return "\n".join(lines)
 
 
@@ -188,8 +200,13 @@ def render_import_dry_run(report: dict[str, object], directory: Path) -> str:
     if isinstance(bootstrap, dict):
         lines.append(_line("Bootstrap action", bootstrap.get("action", bootstrap.get("state", "unknown"))))
     lines.append(
-        "Next: review import-dry-run.json before approving a writing import."
+        "Next: inspect import-dry-run.json. If it is correct, create a destination "
+        "backup, stop writer services, then run drivershub-migrate import-accounts "
+        "--approve --backup-confirmed."
         if ready
-        else "Next: resolve the blocked stage in import-dry-run.json and repeat the dry run."
+        else (
+            "Import cannot continue. Inspect the blocked stage in import-dry-run.json, "
+            "correct its reported prerequisite, then run drivershub-migrate dry-run-import again."
+        )
     )
     return "\n".join(lines)
