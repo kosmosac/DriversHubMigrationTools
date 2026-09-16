@@ -383,6 +383,9 @@ def main(argv: list[str] | None = None) -> int:
                     approved=args.approve,
                     backup_confirmed=args.backup_confirmed,
                     writers_stopped=args.writers_stopped,
+                    convert_personal_notes_to_global=boolean_setting(
+                        "DRIVERSHUB_CONVERT_PERSONAL_NOTES_TO_GLOBAL"
+                    ),
                 )
             elif args.command == "import-content":
                 report = import_content(
@@ -524,6 +527,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "import-user-state":
             print("User-state import complete.")
             print(f"Global notes: {report.get('global_notes', 0)}")
+            print(f"Personal administrator notes converted: {report.get('personal_notes_converted', 0)}")
             print(f"Role-history records: {report.get('role_history_records', 0)}")
             print(f"Active bans: {report.get('active_bans', 0)}")
             print(f"Ban-history records: {report.get('ban_history_records', 0)}")

@@ -25,6 +25,34 @@ class UserStateImportTests(unittest.TestCase):
         self.assertEqual(summary["personal_notes_skipped"], 1)
         self.assertEqual(summary["role_history_records"], 1)
 
+    def test_converts_personal_note_to_global_when_explicitly_enabled(self):
+        with TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            normalized = directory / "normalized"
+            normalized.mkdir()
+            (normalized / "profiles.json").write_text(
+                json.dumps(
+                    {
+                        "records": [
+                            {
+                                "uid": 7,
+                                "global_note": "existing global",
+                                "note": "personal note",
+                            }
+                        ]
+                    }
+                )
+            )
+            (normalized / "bans.json").write_text(json.dumps({"records": []}))
+            sql, summary = build_user_state_stage(
+                directory, convert_personal_notes_to_global=True
+            )
+
+        self.assertIn("4d6967726174656420706572736f6e616c2061646d696e6973747261746f72206e6f7465", sql)
+        self.assertEqual(summary["global_notes"], 1)
+        self.assertEqual(summary["personal_notes_converted"], 1)
+        self.assertEqual(summary["personal_notes_skipped"], 0)
+
     def test_replaces_preexisting_state_for_matched_destination_accounts(self):
         with TemporaryDirectory() as temporary:
             directory = Path(temporary)

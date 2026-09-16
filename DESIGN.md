@@ -238,7 +238,7 @@ must be measured during preflight.
 | User connections | Available according to administrator permissions and privacy behavior | Current Discord, Steam, TruckersMP, and email identifiers where exposed |
 | Roles and points | Available in current member state | Usually complete |
 | Profile and global notes | Partly exposed | Best effort |
-| Personal notes and personal settings | User-specific or incomplete | Mostly unavailable |
+| Personal notes and personal settings | User-specific or incomplete | Notes are skipped by default; explicit operator approval can convert exported personal notes into global notes |
 | Role and ban history | Partly exposed through profiles | Best effort; verify pagination and limits |
 | Current bans | Administrator ban endpoints | Usually complete |
 | Deliveries | Lists and CSV export; detail endpoint has side effects | Baseline import from list and CSV; optional richer import from delivery details |

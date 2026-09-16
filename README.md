@@ -389,7 +389,11 @@ belongs to the imported accounts:
 
 This imports global user notes, active bans, ban history, and role history.
 Personal administrator notes cannot be attributed safely because the source
-API does not identify their author; the command reports and skips them.
+API does not identify their author; the command reports and skips them by
+default. Set `DRIVERSHUB_CONVERT_PERSONAL_NOTES_TO_GLOBAL=true` only when you
+explicitly accept making every exported personal note visible as a global
+administrator note. If a user already has a global note, the converted note is
+appended with a clear `Migrated personal administrator note` label.
 Sessions, MFA enrolments, and transient activity records are not imported.
 
 ## Import content

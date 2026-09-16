@@ -26,7 +26,9 @@ def _role_list(value: object, field: str) -> str:
     return "," + ",".join(str(role) for role in roles) + "," if roles else ",,"
 
 
-def build_user_state_stage(directory: Path) -> tuple[str, dict[str, object]]:
+def build_user_state_stage(
+    directory: Path, *, convert_personal_notes_to_global: bool = False
+) -> tuple[str, dict[str, object]]:
     profiles = _records(directory, "profiles")
     bans = _records(directory, "bans")
     statements = ["SET time_zone = '+00:00';", "START TRANSACTION;"]
@@ -53,15 +55,28 @@ def build_user_state_stage(directory: Path) -> tuple[str, dict[str, object]]:
             ]
         )
         replaced_destination_state = True
-    role_histories = ban_histories = global_notes = personal_notes_skipped = 0
+    role_histories = ban_histories = global_notes = 0
+    personal_notes_skipped = personal_notes_converted = 0
     for profile in profiles:
         uid = _integer(profile.get("uid"), "uid")
         global_note = profile.get("global_note")
-        if isinstance(global_note, str) and global_note:
+        global_note = global_note if isinstance(global_note, str) else ""
+        personal_note = profile.get("note")
+        personal_note = personal_note if isinstance(personal_note, str) else ""
+        if personal_note and convert_personal_notes_to_global:
+            global_note = (
+                global_note
+                + "\n\n[Migrated personal administrator note]\n"
+                + personal_note
+                if global_note
+                else personal_note
+            )
+            personal_notes_converted += 1
+        elif personal_note:
+            personal_notes_skipped += 1
+        if global_note:
             statements.append("INSERT INTO `user_note` (`from_uid`,`to_uid`,`note`,`update_timestamp`) " + f"VALUES (-1000,{uid},{_sql_value(global_note)},NULL);")
             global_notes += 1
-        if isinstance(profile.get("note"), str) and profile.get("note"):
-            personal_notes_skipped += 1
         histories = profile.get("role_history")
         if histories is not None:
             if not isinstance(histories, list):
@@ -91,4 +106,4 @@ def build_user_state_stage(directory: Path) -> tuple[str, dict[str, object]]:
         values = [_integer(row.get("uid"), "ban uid", optional=True), row.get("email") if isinstance(row.get("email"), str) else None, _integer(row.get("discordid"), "ban discordid", optional=True), _integer(row.get("steamid"), "ban steamid", optional=True), _integer(row.get("truckersmpid"), "ban truckersmpid", optional=True), _integer(row.get("expire_timestamp"), "ban expire_timestamp"), row.get("reason") if isinstance(row.get("reason"), str) else ""]
         statements.append("INSERT INTO `banned` (`uid`,`email`,`discordid`,`steamid`,`truckersmpid`,`expire_timestamp`,`reason`) VALUES (" + ",".join(_sql_value(value) for value in values) + ");")
     statements.append("COMMIT;")
-    return "\n".join(statements) + "\n", {"state": "ready", "global_notes": global_notes, "personal_notes_skipped": personal_notes_skipped, "role_history_records": role_histories, "active_bans": len(bans), "ban_history_records": ban_histories, "replaced_destination_user_state": replaced_destination_state, "database_time_zone": "+00:00"}
+    return "\n".join(statements) + "\n", {"state": "ready", "global_notes": global_notes, "personal_notes_converted": personal_notes_converted, "personal_notes_skipped": personal_notes_skipped, "role_history_records": role_histories, "active_bans": len(bans), "ban_history_records": ban_histories, "replaced_destination_user_state": replaced_destination_state, "database_time_zone": "+00:00"}

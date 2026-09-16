@@ -11,7 +11,7 @@ from .storage import write_json
 from .user_state_import import build_user_state_stage
 
 
-def import_user_state(directory: Path, target_directory: Path | None, *, mode: str, database: dict[str, object], approved: bool, backup_confirmed: bool, writers_stopped: bool, runner=subprocess.run) -> dict[str, object]:
+def import_user_state(directory: Path, target_directory: Path | None, *, mode: str, database: dict[str, object], approved: bool, backup_confirmed: bool, writers_stopped: bool, convert_personal_notes_to_global: bool = False, runner=subprocess.run) -> dict[str, object]:
     if not approved or not backup_confirmed:
         raise ValueError("The user-state import requires --approve and --backup-confirmed")
     journal_path = directory / "import-journal.json"
@@ -35,7 +35,10 @@ def import_user_state(directory: Path, target_directory: Path | None, *, mode: s
         target = None
     else:
         raise ValueError("DRIVERSHUB_TARGET_MODE must be aio or mariadb")
-    sql, summary = build_user_state_stage(directory)
+    sql, summary = build_user_state_stage(
+        directory,
+        convert_personal_notes_to_global=convert_personal_notes_to_global,
+    )
     stages["user_state"] = {**summary, "state": "in-progress"}
     write_json(journal_path, journal)
     try:
