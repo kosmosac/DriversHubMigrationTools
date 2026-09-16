@@ -11,8 +11,9 @@ installation and its MariaDB database.
 The migration preserves all accessible source data without anonymizing it.
 Some information—including passwords, MFA secrets, sessions, deleted records,
 and data hidden behind unavailable external plugins—cannot be obtained through
-the source API. Missing delivery details and economy transaction metadata use
-recognizable placeholders and are designed for later optional enrichment.
+the source API. Missing delivery details and economy transaction timestamps use
+recognizable placeholders and can be restored with the resumable post-migration
+enrichment commands while the source Hub remains reachable.
 
 See [DESIGN.md](DESIGN.md) for the coverage model and technical limitations.
 
@@ -533,14 +534,16 @@ cd /path/to/DriversHubDockerAIO
 docker compose up -d
 ```
 
-## Optional post-migration enrichment
+## Post-migration enrichment
 
-The destination may remain online while the following jobs run. Both jobs are
-resumable: progress and source responses are stored below `enrichment/` in the
-migration directory, completed work is skipped, and destination rows are
-updated only while they still carry the exact migration marker. `--limit N`
-can restrict a run to `N` source requests. During a run, the commands show
-completed work, percentage, elapsed time, and an estimated remaining time.
+Delivery-detail and economy-timestamp enrichment are supported post-migration
+operations. They are not required to start the migrated Hub, and the
+destination may remain online while they run. Both jobs are resumable: progress
+and source responses are stored below `enrichment/` in the migration directory,
+completed work is skipped, and destination rows are updated only while they
+still carry the exact migration marker. `--limit N` can restrict a run to `N`
+source requests. During a run, the commands show completed work, percentage,
+elapsed time, and an estimated remaining time.
 
 Delivery details and telemetry can be restored individually:
 
