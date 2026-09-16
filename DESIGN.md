@@ -269,7 +269,7 @@ secrets, and Discord bot tokens. The exporter must record these fields as
 unavailable. It must not replace them with fabricated or anonymized values.
 
 The directory contains personal data. The exporter must create files and
-directories with owner-only permissions. Normal logs should identify records
+directories in the operator's trusted migration environment. Normal logs should identify records
 by stable internal references instead of repeating their contents; this must
 not change or redact the exported files. If the operator transfers the
 directory to another host, secure transport and storage are the operator's

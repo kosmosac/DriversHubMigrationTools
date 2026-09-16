@@ -5,16 +5,31 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import tempfile
 from pathlib import Path
+import secrets
+import stat
 from typing import Any
 
 
 def atomic_write(path: Path, data: bytes) -> None:
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    fd, temporary_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    existing_mode = (
+        stat.S_IMODE(path.stat().st_mode) if path.exists() else None
+    )
+    while True:
+        temporary_name = path.parent / f".{path.name}.{secrets.token_hex(8)}"
+        try:
+            fd = os.open(
+                temporary_name,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                existing_mode if existing_mode is not None else 0o666,
+            )
+            break
+        except FileExistsError:
+            continue
     try:
-        os.fchmod(fd, 0o600)
+        if existing_mode is not None:
+            os.fchmod(fd, existing_mode)
         with os.fdopen(fd, "wb") as temporary_file:
             temporary_file.write(data)
             temporary_file.flush()
@@ -42,8 +57,7 @@ class WorkJournal:
     def __init__(self, root: Path) -> None:
         self.root = root
         self.path = root / "work-journal.json"
-        self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        os.chmod(self.root, 0o700)
+        self.root.mkdir(parents=True, exist_ok=True)
         if self.path.exists():
             self.data = json.loads(self.path.read_text(encoding="utf-8"))
         else:

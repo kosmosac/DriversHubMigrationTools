@@ -1,4 +1,6 @@
 import json
+import os
+import stat
 import tempfile
 import unittest
 from pathlib import Path
@@ -31,6 +33,15 @@ class StorageTests(unittest.TestCase):
                 json.loads((path / "work-journal.json").read_text())["format_version"],
                 1,
             )
+
+    def test_atomic_rewrite_preserves_existing_mode(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "value.json"
+            path.write_bytes(b"old")
+            os.chmod(path, 0o640)
+            atomic_write(path, b"new")
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o640)
+            self.assertEqual(path.read_bytes(), b"new")
 
 
 if __name__ == "__main__":
