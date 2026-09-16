@@ -2,24 +2,14 @@
 
 from __future__ import annotations
 
-from base64 import b64encode
-import json
 from pathlib import Path
 
 from .account_import import _integer, _sql_value
+from .storage import compress_and_encode, records
 
 
 def _records(directory: Path, name: str) -> list[dict[str, object]]:
-    path = directory / "normalized" / f"{name}.json"
-    if not path.exists():
-        return []
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))["records"]
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError) as exc:
-        raise ValueError(f"Unable to read normalized {name}") from exc
-    if not isinstance(value, list) or not all(isinstance(row, dict) for row in value):
-        raise ValueError(f"The normalized {name} records are invalid")
-    return value
+    return records(directory, name)
 
 
 def _compressed(value: object, field: str) -> str:
@@ -27,11 +17,7 @@ def _compressed(value: object, field: str) -> str:
         raise ValueError(f"{field} is not a string")
     if not value:
         return ""
-    try:
-        import zstandard
-    except ImportError as exc:
-        raise ValueError("Install project dependencies to import compressed content") from exc
-    return b64encode(zstandard.ZstdCompressor().compress(value.encode())).decode()
+    return compress_and_encode(value.encode())
 
 
 def _nested_id(row: dict[str, object], key: str, field: str) -> int:

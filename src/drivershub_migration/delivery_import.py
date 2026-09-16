@@ -2,34 +2,25 @@
 
 from __future__ import annotations
 
-from base64 import b64encode
 import copy
 import json
 from pathlib import Path
 
 from .account_import import _integer, _sql_value
 from .content_import import _records, _timestamp
+from .storage import TRACKER_TYPES, compress_and_encode
 
 
-TRACKER_TYPES = {"tracksim": 2, "trucky": 3, "custom": 4, "unitracker": 5}
 DETAIL_MARKER = "migration-import/pending-detail-enrichment"
 
 
 def _compressed_json(value: object) -> str:
-    try:
-        import zstandard
-    except ImportError as exc:
-        raise ValueError("Install project dependencies to build delivery placeholders") from exc
     raw = json.dumps(value, separators=(",", ":"), ensure_ascii=False).encode()
-    return b64encode(zstandard.ZstdCompressor().compress(raw)).decode()
+    return compress_and_encode(raw)
 
 
 def _compressed_text(value: str) -> str:
-    try:
-        import zstandard
-    except ImportError as exc:
-        raise ValueError("Install project dependencies to build delivery placeholders") from exc
-    return b64encode(zstandard.ZstdCompressor().compress(value.encode())).decode()
+    return compress_and_encode(value.encode())
 
 
 def placeholder_detail(*, delivered: bool, ats: bool) -> str:

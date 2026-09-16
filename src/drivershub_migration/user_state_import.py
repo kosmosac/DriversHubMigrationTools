@@ -6,17 +6,11 @@ import json
 from pathlib import Path
 
 from .account_import import _integer, _sql_value
+from .storage import records
 
 
 def _records(directory: Path, name: str) -> list[dict[str, object]]:
-    try:
-        document = json.loads((directory / "normalized" / f"{name}.json").read_text(encoding="utf-8"))
-        records = document["records"]
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError) as exc:
-        raise ValueError(f"Unable to read normalized {name}") from exc
-    if not isinstance(records, list) or not all(isinstance(row, dict) for row in records):
-        raise ValueError(f"The normalized {name} records are invalid")
-    return records
+    return records(directory, name, required=True)
 
 
 def _role_list(value: object, field: str) -> str:

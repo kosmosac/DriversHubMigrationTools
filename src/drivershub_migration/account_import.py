@@ -6,15 +6,8 @@ import math
 from base64 import b64encode
 from pathlib import Path
 
-from .storage import read_object
+from .storage import TRACKER_TYPES, read_object
 
-
-TRACKER_IDS = {
-    "tracksim": 2,
-    "trucky": 3,
-    "custom": 4,
-    "unitracker": 5,
-}
 
 UID_REFERENCES = {
     "application": ("uid",),
@@ -316,7 +309,7 @@ def build_account_stage(directory: Path) -> tuple[str, dict[str, object]]:
             ),
             "join_timestamp": join_timestamp,
             "mfa_secret": "",
-            "tracker_in_use": TRACKER_IDS.get(str(profile.get("tracker", "")).lower(), 0),
+            "tracker_in_use": TRACKER_TYPES.get(str(profile.get("tracker", "")).lower(), 0),
         }
         if uid in merged_source_uids:
             assignments = ",".join(

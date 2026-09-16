@@ -97,12 +97,8 @@ def _client_config(
 
 
 def _compressed_asset(raw: bytes) -> str:
-    try:
-        import zstandard
-    except ImportError as exc:
-        raise ValueError("Install project dependencies to import branding assets") from exc
     encoded = b64encode(raw)
-    return b64encode(zstandard.ZstdCompressor().compress(encoded)).decode()
+    return compress_and_encode(encoded)
 
 
 def _database_sql(

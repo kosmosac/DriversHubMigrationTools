@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from base64 import b64encode
 import os
 from pathlib import Path
 import secrets
@@ -59,6 +60,38 @@ def read_object(path: Path, description: str) -> dict[str, object]:
 
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+TRACKER_TYPES: dict[str, int] = {
+    "tracksim": 2,
+    "trucky": 3,
+    "custom": 4,
+    "unitracker": 5,
+}
+
+
+def records(directory: Path, name: str, *, required: bool = False) -> list[dict[str, object]]:
+    path = directory / "normalized" / f"{name}.json"
+    if not path.exists():
+        if required:
+            raise ValueError(f"Unable to read normalized {name}")
+        return []
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))["records"]
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise ValueError(f"Unable to read normalized {name}") from exc
+    if not isinstance(value, list) or not all(isinstance(row, dict) for row in value):
+        raise ValueError(f"The normalized {name} records are invalid")
+    return value
+
+
+def compress_and_encode(data: bytes) -> str:
+    """Compress *data* with zstd and base64-encode the result."""
+    try:
+        import zstandard
+    except ImportError as exc:
+        raise ValueError("Install project dependencies to compress content") from exc
+    return b64encode(zstandard.ZstdCompressor().compress(data)).decode()
 
 
 class WorkJournal:
