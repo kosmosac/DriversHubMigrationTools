@@ -28,54 +28,35 @@ destination schema requires them.
 
 The normal migration sequence is:
 
-1. assess and export the source Hub;
-2. verify the completed export;
-3. create an import plan and inspect the destination;
-4. back up the destination and stop its writer services;
-5. run the full transactional dry-run import;
-6. run every documented import stage in order;
-7. verify the destination before starting the Hub.
+1. run the resumable source export workflow;
+2. prepare and back up the destination;
+3. stop its writer services;
+4. run the resumable destination import workflow;
+5. start and check the migrated Hub.
 
 Each command prints a concise result and the next action. Detailed JSON reports
 and resumable state remain in the migration directory.
 
 ### Complete command sequence
 
-Run the read-only source and planning stages first:
+Assess, export, and verify the source in one resumable operation:
 
 ```bash
-.venv/bin/drivershub-migrate assess
-.venv/bin/drivershub-migrate export
-.venv/bin/drivershub-migrate verify
-.venv/bin/drivershub-migrate plan-import
-.venv/bin/drivershub-migrate preflight-target
+.venv/bin/drivershub-migrate export-all
 ```
 
 Create a destination backup and stop all destination writer services. Then run
-the full transactional validation followed by every writing stage in this
-order:
+the complete destination workflow:
 
 ```bash
-.venv/bin/drivershub-migrate dry-run-import
-.venv/bin/drivershub-migrate import-accounts --backup-confirmed
-.venv/bin/drivershub-migrate import-configuration
-.venv/bin/drivershub-migrate import-user-state
-.venv/bin/drivershub-migrate import-content
-.venv/bin/drivershub-migrate import-applications
-.venv/bin/drivershub-migrate import-events-challenges
-.venv/bin/drivershub-migrate import-polls-tasks
-.venv/bin/drivershub-migrate import-economy
-.venv/bin/drivershub-migrate import-economy-inventory
-.venv/bin/drivershub-migrate import-deliveries
-.venv/bin/drivershub-migrate import-relationships
-.venv/bin/drivershub-migrate verify-target
+.venv/bin/drivershub-migrate import-all --backup-confirmed
 ```
 
-`preflight-target` either produces a supported plan or blocks the import with
-specific conflicts that must be corrected. It does not require a separate
-approval. `--backup-confirmed` is supplied once when the first writing stage
-starts; completion of each stage in `import-journal.json` authorizes the next
-dependent stage.
+`import-all` creates the import plan, performs destination preflight, runs the
+full rollback validation, executes every import stage in dependency order, and
+verifies the final destination. `--backup-confirmed` is required only when the
+workflow starts writing for the first time. If it is interrupted, run the same
+command again; completed stages are read from `import-journal.json` and skipped.
 
 After successful verification, start the destination Hub. The optional,
 resumable enrichment jobs may run while it is online:
@@ -85,9 +66,8 @@ resumable enrichment jobs may run while it is online:
 .venv/bin/drivershub-migrate enrich-economy-transactions
 ```
 
-The sections below describe prerequisites, effects, limitations, and recovery
-behavior for every command. Do not use this overview as a replacement for
-those instructions.
+The individual commands documented below remain available for diagnosis and
+targeted recovery. They are not required during the normal workflow.
 
 ## Requirements
 
@@ -113,7 +93,13 @@ required:
 .venv/bin/drivershub-migrate --json verify
 ```
 
-## Assess a source Hub
+## Advanced individual commands
+
+The commands below expose the stages used by `export-all` and `import-all`.
+They are useful for diagnosis or targeted recovery, but users should normally
+run the combined workflows shown above.
+
+### Assess a source Hub
 
 Create a dedicated application token in the source Hub. Give it a name that
 identifies the migration and its creation date. Set the source URL, token, and
@@ -146,7 +132,7 @@ configuration file:
 The migration directory contains personal and operational data. Store it on a
 trusted system and retain its owner-only file permissions.
 
-## Export supported source data
+### Export supported source data
 
 After a successful assessment, run:
 
@@ -211,7 +197,7 @@ tokens. Passwords, MFA secrets, OAuth tokens, sessions, deleted deliveries,
 private user settings, and data owned only by unavailable external plugins are
 also outside the accessible source data.
 
-## Verify an export
+### Verify an export
 
 Before transferring or importing a migration directory, verify its manifest,
 files, and checksums:
@@ -226,7 +212,7 @@ export entries are failed, incomplete, or inconsistent. `manifest_states`
 summarizes all recorded states. The command exits with a nonzero status when
 the integrity is invalid or the export is incomplete.
 
-## Plan the destination import
+### Plan the destination import
 
 Create the configuration, branding, identity, and account-claim plan before
 any destination data is written:
@@ -255,7 +241,7 @@ Accounts without Steam, Discord, or a valid email address are listed as
 requiring manual recovery. No destination is contacted or modified at this
 stage.
 
-## Inspect the destination
+### Inspect the destination
 
 The destination can be this project's preferred Drivers Hub Docker AIO
 deployment or any installation of the upstream HubBackend with an accessible
@@ -289,7 +275,7 @@ contradictory identity matches stop the import. This does not support merging
 arbitrary content from an already active destination Hub. No account is changed
 by the preflight command.
 
-## Preview the import
+### Preview the import
 
 After destination preflight, create a backup and stop every destination writer
 service. Then validate the complete planned import:
@@ -323,7 +309,7 @@ time as the actual import for a large migration, but commits no writes.
 For a direct MariaDB destination, add `--writers-stopped`. The AIO mode checks
 the Compose services automatically.
 
-## Import accounts
+### Import accounts
 
 The account stage is the first writing import stage. It preserves source UIDs
 and member IDs. A matching destination account keeps its destination password
@@ -363,7 +349,7 @@ For a direct MariaDB destination, stop all backend writers yourself and add
 `--writers-stopped` to the command. This is an explicit confirmation because
 the tool cannot inspect services outside the Docker AIO deployment.
 
-## Import configuration and branding
+### Import configuration and branding
 
 Update the installed command after pulling a version that adds dependencies:
 
@@ -391,7 +377,7 @@ file atomically and updates frontend configuration and assets in one database
 transaction. Do not restart the Hub until all remaining import stages have
 completed.
 
-## Import user state
+### Import user state
 
 With the destination writer services still stopped, import durable state that
 belongs to the imported accounts:
@@ -409,7 +395,7 @@ administrator note. If a user already has a global note, the converted note is
 appended with a clear `Migrated personal administrator note` label.
 Sessions, MFA enrolments, and transient activity records are not imported.
 
-## Import content
+### Import content
 
 Import the self-contained content resources while the destination writers
 remain stopped:
@@ -453,7 +439,7 @@ does not expose original vote timestamps, so reconstructed votes use `0`.
 Tasks retain their current workflow state, assignments, notes, and exposed
 timestamps; their unavailable creation timestamp also uses `0`.
 
-## Import economy state
+### Import economy state
 
 Import the recoverable economy state next:
 
@@ -480,7 +466,7 @@ export. Garage-slot purchase prices and merchandise sale prices are not exposed
 by the source API and therefore use `0`; all exposed identifiers, ownership,
 state, and timestamps are retained.
 
-## Import baseline deliveries
+### Import baseline deliveries
 
 Import the delivery rows with verified Unix timestamps next:
 
@@ -495,7 +481,7 @@ The detail payload contains a recognizable, frontend-renderable placeholder and
 keeps delivery pages usable while allowing optional detail backfill to identify
 and safely replace placeholders later.
 
-## Import dependent relationships
+### Import dependent relationships
 
 After deliveries exist, restore their exported relationships:
 
@@ -509,7 +495,7 @@ import. Where the source API omits a relationship timestamp, the referenced
 delivery's verified Unix timestamp is used; pending division requests remain
 explicitly unprocessed.
 
-## Verify and start the destination
+### Verify and start the destination
 
 Keep the writer services stopped and verify the completed import against the
 destination database:

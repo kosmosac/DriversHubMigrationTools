@@ -35,6 +35,7 @@ from .relationship_writer import import_relationships
 from .final_verification import verify_target
 from .target import preflight_target
 from .verify import verify_export
+from .workflows import export_all, import_all
 
 
 def parser() -> argparse.ArgumentParser:
@@ -73,6 +74,10 @@ def parser() -> argparse.ArgumentParser:
         "export", help="Export currently supported source data"
     )
     common(export_command)
+    export_all_command = commands.add_parser(
+        "export-all", help="Assess, export, and verify a source Hub"
+    )
+    common(export_all_command)
     verify_command = commands.add_parser(
         "verify", help="Verify files and checksums in a migration directory"
     )
@@ -118,6 +123,13 @@ def parser() -> argparse.ArgumentParser:
     account_command.add_argument("--target", type=Path)
     account_command.add_argument("--backup-confirmed", action="store_true")
     account_command.add_argument("--writers-stopped", action="store_true")
+    import_all_command = commands.add_parser(
+        "import-all", help="Validate, import, resume, and verify a destination"
+    )
+    import_all_command.add_argument("--output", type=Path)
+    import_all_command.add_argument("--target", type=Path)
+    import_all_command.add_argument("--backup-confirmed", action="store_true")
+    import_all_command.add_argument("--writers-stopped", action="store_true")
     configuration_command = commands.add_parser(
         "import-configuration",
         help="Import portable configuration and branding into a stopped destination",
@@ -230,6 +242,40 @@ def main(argv: list[str] | None = None) -> int:
     def progress(message: str) -> None:
         print(f"[drivershub-migrate] {message}", file=sys.stderr, flush=True)
 
+    if args.command == "export-all":
+        source = args.source or setting("DRIVERSHUB_SOURCE_URL")
+        output_value = args.output or setting("DRIVERSHUB_MIGRATION_DIRECTORY")
+        token = setting("DRIVERSHUB_APPLICATION_TOKEN")
+        if not source or not output_value or not token:
+            raise SystemExit(
+                "export-all requires DRIVERSHUB_SOURCE_URL, "
+                "DRIVERSHUB_MIGRATION_DIRECTORY, and DRIVERSHUB_APPLICATION_TOKEN"
+            )
+        request_interval = float(setting("DRIVERSHUB_REQUEST_INTERVAL") or "1.1")
+        if request_interval < 0:
+            raise SystemExit("DRIVERSHUB_REQUEST_INTERVAL must not be negative")
+        try:
+            report = export_all(
+                source, Path(output_value), token,
+                request_interval=request_interval,
+                export_delivery_details=boolean_setting(
+                    "DRIVERSHUB_EXPORT_DELIVERY_DETAILS"
+                ),
+                progress=progress,
+            )
+        except (RuntimeError, ValueError) as exc:
+            raise SystemExit(str(exc)) from exc
+        if args.json:
+            print(json.dumps(report, indent=2, ensure_ascii=False))
+        else:
+            verification = report.get("verification", {})
+            print("Source export workflow complete." if report["state"] == "complete" else "Source export workflow incomplete.")
+            print(f"Integrity: {verification.get('integrity', 'unknown')}")
+            print(f"Export: {verification.get('export', 'unknown')}")
+            print(f"Checked files: {verification.get('checked_files', 0)}")
+            print("Next: prepare the destination and run drivershub-migrate import-all --backup-confirmed." if report["state"] == "complete" else "Next: inspect export.json and rerun export-all to resume failed requests.")
+        return 0 if report["state"] == "complete" else 1
+
     if args.command in {"verify", "plan-import"}:
         output_value = args.output or setting("DRIVERSHUB_MIGRATION_DIRECTORY")
         if not output_value:
@@ -260,6 +306,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command in {
         "preflight-target",
         "dry-run-import",
+        "import-all",
         "import-accounts",
         "import-configuration",
         "import-user-state",
@@ -285,7 +332,21 @@ def main(argv: list[str] | None = None) -> int:
         if target_mode == "aio" and not target_value:
             raise SystemExit("Set DRIVERSHUB_TARGET_DIRECTORY in .env or use --target")
         try:
-            if args.command in {"backfill-delivery-details", "enrich-economy-transactions"}:
+            if args.command == "import-all":
+                database = {"host": setting("DRIVERSHUB_TARGET_DB_HOST"), "port": setting("DRIVERSHUB_TARGET_DB_PORT"), "user": setting("DRIVERSHUB_TARGET_DB_USER"), "password": setting("DRIVERSHUB_TARGET_DB_PASSWORD"), "database": setting("DRIVERSHUB_TARGET_DB_NAME"), "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET")}
+                config_value = setting("DRIVERSHUB_TARGET_CONFIG_PATH")
+                report = import_all(
+                    Path(output_value), Path(target_value) if target_value else None,
+                    mode=target_mode, database=database,
+                    config_path=Path(config_value) if config_value else None,
+                    backup_confirmed=args.backup_confirmed,
+                    writers_stopped=args.writers_stopped,
+                    convert_personal_notes=boolean_setting(
+                        "DRIVERSHUB_CONVERT_PERSONAL_NOTES_TO_GLOBAL"
+                    ),
+                    progress=progress,
+                )
+            elif args.command in {"backfill-delivery-details", "enrich-economy-transactions"}:
                 source = args.source or setting("DRIVERSHUB_SOURCE_URL")
                 token = setting("DRIVERSHUB_APPLICATION_TOKEN")
                 if not source or not token:
@@ -463,6 +524,17 @@ def main(argv: list[str] | None = None) -> int:
                     )
         except ValueError as exc:
             raise SystemExit(str(exc)) from exc
+        if args.command == "import-all":
+            verification = report.get("verification", {})
+            if args.json:
+                print(json.dumps(report, indent=2, ensure_ascii=False))
+            else:
+                print("Destination import workflow complete." if report.get("state") == "complete" else "Destination import workflow incomplete.")
+                print(f"Verified resource counts: {len(verification.get('expected', {}))}")
+                print(f"Count mismatches: {len(verification.get('count_mismatches', []))}")
+                print(f"Referential-integrity violations: {len(verification.get('integrity_violations', []))}")
+                print("Next: restart the destination Hub and perform the post-import checks." if report.get("state") == "complete" else "Next: inspect target-verification.json and rerun import-all after correcting the problem.")
+            return 0 if report.get("state") == "complete" else 1
         if args.command == "backfill-delivery-details":
             print("Delivery detail backfill run complete.")
             print(f"Source requests attempted: {report.get('attempted', 0)}")
