@@ -377,10 +377,13 @@ The importer must be schema-versioned. Before any write, it must compare the
 actual destination schema with an explicitly supported schema. It must stop on
 unknown tables, columns, or versions.
 
-All writes for one migration stage should run in a transaction. The importer
-must support a dry run, integrity checks, rollback on failure, and an import
-journal. Generic SQL dump replay is not suitable because the source export is
-a logical API export, not a database dump.
+All writes for one migration stage should run in a transaction. Before the
+first writing stage, the dry run must execute the complete ordered import
+against the real destination schema inside a transaction that always rolls
+back. This validates database constraints and dependencies between stages,
+rather than merely summarizing planned record counts. Generic SQL dump replay
+is not suitable because the source export is a logical API export, not a
+database dump.
 
 ### Destination configuration
 
@@ -658,7 +661,6 @@ The following manual checkpoints are appropriate:
 - creation and verification of the emergency administrator;
 - confirmation that the destination backup exists;
 - confirmation that destination writer services are stopped;
-- confirmation that the destination backup exists before the first writing stage.
 
 Routine pagination, downloads, checksums, reference mapping, database inserts,
 and verification queries should remain automated.

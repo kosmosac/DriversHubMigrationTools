@@ -142,7 +142,8 @@ def render_target_preflight(report: dict[str, object]) -> str:
     elif isinstance(bootstrap, dict) and bootstrap.get("state") == "ready":
         lines.append(
             "Next: inspect target-preflight.json. If the generated account mapping "
-            "and recovery IDs are correct, run drivershub-migrate dry-run-import. "
+            "and recovery IDs are correct, create a destination backup, stop its "
+            "writer services, then run drivershub-migrate dry-run-import. "
             "A supported plan is used automatically when import-accounts starts."
         )
     else:
@@ -199,9 +200,14 @@ def render_import_dry_run(report: dict[str, object], directory: Path) -> str:
     bootstrap = report.get("bootstrap", {})
     if isinstance(bootstrap, dict):
         lines.append(_line("Bootstrap action", bootstrap.get("action", bootstrap.get("state", "unknown"))))
+    validation = report.get("database_validation", {})
+    if isinstance(validation, dict):
+        lines.append(_line("Full database simulation", validation.get("state", "unknown")))
+        if validation.get("error"):
+            lines.append(_line("Simulation error", validation["error"]))
     lines.append(
-        "Next: inspect import-dry-run.json. If it is correct, create a destination "
-        "backup, stop writer services, then run drivershub-migrate import-accounts "
+        "Next: inspect import-dry-run.json. If it is correct, keep writer services "
+        "stopped and run drivershub-migrate import-accounts "
         "--backup-confirmed."
         if ready
         else (

@@ -31,8 +31,8 @@ The normal migration sequence is:
 1. assess and export the source Hub;
 2. verify the completed export;
 3. create an import plan and inspect the destination;
-4. run the dry-run import;
-5. back up the destination and stop its writer services;
+4. back up the destination and stop its writer services;
+5. run the full transactional dry-run import;
 6. run every documented import stage in order;
 7. verify the destination before starting the Hub.
 
@@ -49,13 +49,14 @@ Run the read-only source and planning stages first:
 .venv/bin/drivershub-migrate verify
 .venv/bin/drivershub-migrate plan-import
 .venv/bin/drivershub-migrate preflight-target
-.venv/bin/drivershub-migrate dry-run-import
 ```
 
-After creating a destination backup and stopping all destination writer
-services, run every writing stage in this order:
+Create a destination backup and stop all destination writer services. Then run
+the full transactional validation followed by every writing stage in this
+order:
 
 ```bash
+.venv/bin/drivershub-migrate dry-run-import
 .venv/bin/drivershub-migrate import-accounts --backup-confirmed
 .venv/bin/drivershub-migrate import-configuration
 .venv/bin/drivershub-migrate import-user-state
@@ -290,19 +291,30 @@ by the preflight command.
 
 ## Preview the import
 
-After destination preflight, create a complete non-writing summary of the
-planned import:
+After destination preflight, create a backup and stop every destination writer
+service. Then validate the complete planned import:
 
 ```bash
 .venv/bin/drivershub-migrate dry-run-import
 ```
 
-The command refreshes the destination preflight and writes
-`import-dry-run.json`. It reports planned configuration, branding, accounts,
-content, economy data, and deliveries. When delivery details were not exported,
-the report shows how many deliveries require frontend-compatible placeholders
-and can be completed by a later optional backfill. The command does not modify
-the destination.
+The command refreshes the destination preflight, builds the SQL for every
+import stage, and executes it against the real destination schema in one
+transaction that always ends with `ROLLBACK`. This validates data types,
+primary and unique keys, foreign keys, existing destination rows, schema
+compatibility, and dependencies between stages before the writing import
+starts. It also builds and validates the merged configuration and every
+branding asset without writing the configuration file.
+
+The result is written to `import-dry-run.json`. A successful report contains
+`database_validation.state: ready`; any rejected statement blocks the import
+and includes the database error. When delivery details were not exported, the
+report also shows how many deliveries will initially use frontend-compatible
+placeholders. The validation can take a similar amount of database processing
+time as the actual import for a large migration, but commits no writes.
+
+For a direct MariaDB destination, add `--writers-stopped`. The AIO mode checks
+the Compose services automatically.
 
 ## Import accounts
 

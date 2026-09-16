@@ -8,8 +8,9 @@ from drivershub_migration.dry_run import create_import_dry_run
 
 
 class ImportDryRunTests(unittest.TestCase):
+    @patch("drivershub_migration.dry_run.validate_import", return_value={"state": "ready", "committed_writes": 0})
     @patch("drivershub_migration.dry_run.preflight_target")
-    def test_plans_placeholder_deliveries_without_target_writes(self, preflight):
+    def test_plans_placeholder_deliveries_without_target_writes(self, preflight, validate):
         preflight.return_value = {
             "state": "action-required",
             "bootstrap": {

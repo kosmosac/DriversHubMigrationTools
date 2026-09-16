@@ -10,6 +10,7 @@ from typing import Callable
 
 from .storage import write_json
 from .target import preflight_target
+from .import_validation import validate_import
 
 
 DELIVERY_TIMESTAMP_SOURCE = "normalized/deliveries.json:timestamp"
@@ -162,6 +163,9 @@ def create_import_dry_run(
     *,
     mode: str = "aio",
     database: dict[str, object] | None = None,
+    config_path: Path | None = None,
+    convert_personal_notes: bool = False,
+    writers_stopped: bool = False,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> dict[str, object]:
     target = preflight_target(
@@ -212,9 +216,27 @@ def create_import_dry_run(
         and timestamp_policy["state"] == "ready"
     )
 
+    validation: dict[str, object]
+    if plan_ready and bootstrap_ready and deliveries_ready:
+        try:
+            validation = validate_import(
+                migration_directory, target_directory, mode=mode,
+                database=database or {}, config_path=config_path,
+                convert_personal_notes=convert_personal_notes, runner=runner,
+                writers_stopped=writers_stopped,
+            )
+        except ValueError as exc:
+            validation = {"state": "blocked", "error": str(exc), "committed_writes": 0}
+    else:
+        validation = {
+            "state": "blocked",
+            "error": "The source plan, destination identity plan, or delivery baseline is not ready.",
+            "committed_writes": 0,
+        }
+
     report = {
         "format_version": 1,
-        "state": "ready" if plan_ready and bootstrap_ready and deliveries_ready else "blocked",
+        "state": "ready" if validation["state"] == "ready" else "blocked",
         "target_mode": mode,
         "bootstrap": bootstrap,
         "stages": {
@@ -264,6 +286,7 @@ def create_import_dry_run(
         },
         "writes": 0,
         "target_modified": False,
+        "database_validation": validation,
     }
     write_json(migration_directory / "import-dry-run.json", report)
     return report

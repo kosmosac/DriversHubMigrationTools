@@ -110,6 +110,7 @@ def parser() -> argparse.ArgumentParser:
         type=Path,
         help="migration directory; overrides DRIVERSHUB_MIGRATION_DIRECTORY",
     )
+    dry_run_command.add_argument("--writers-stopped", action="store_true")
     account_command = commands.add_parser(
         "import-accounts", help="Import accounts into a stopped destination"
     )
@@ -436,20 +437,30 @@ def main(argv: list[str] | None = None) -> int:
                     writers_stopped=args.writers_stopped,
                 )
             else:
-                function = preflight_target if args.command == "preflight-target" else create_import_dry_run
-                report = function(
-                    Path(output_value),
-                    Path(target_value) if target_value else None,
-                    mode=target_mode,
-                    database={
-                        "host": setting("DRIVERSHUB_TARGET_DB_HOST"),
-                        "port": setting("DRIVERSHUB_TARGET_DB_PORT"),
-                        "user": setting("DRIVERSHUB_TARGET_DB_USER"),
-                        "password": setting("DRIVERSHUB_TARGET_DB_PASSWORD"),
-                        "database": setting("DRIVERSHUB_TARGET_DB_NAME"),
-                        "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET"),
-                    },
-                )
+                database = {
+                    "host": setting("DRIVERSHUB_TARGET_DB_HOST"),
+                    "port": setting("DRIVERSHUB_TARGET_DB_PORT"),
+                    "user": setting("DRIVERSHUB_TARGET_DB_USER"),
+                    "password": setting("DRIVERSHUB_TARGET_DB_PASSWORD"),
+                    "database": setting("DRIVERSHUB_TARGET_DB_NAME"),
+                    "unix_socket": setting("DRIVERSHUB_TARGET_DB_UNIX_SOCKET"),
+                }
+                if args.command == "preflight-target":
+                    report = preflight_target(
+                        Path(output_value), Path(target_value) if target_value else None,
+                        mode=target_mode, database=database,
+                    )
+                else:
+                    config_value = setting("DRIVERSHUB_TARGET_CONFIG_PATH")
+                    report = create_import_dry_run(
+                        Path(output_value), Path(target_value) if target_value else None,
+                        mode=target_mode, database=database,
+                        config_path=Path(config_value) if config_value else None,
+                        convert_personal_notes=boolean_setting(
+                            "DRIVERSHUB_CONVERT_PERSONAL_NOTES_TO_GLOBAL"
+                        ),
+                        writers_stopped=args.writers_stopped,
+                    )
         except ValueError as exc:
             raise SystemExit(str(exc)) from exc
         if args.command == "backfill-delivery-details":
