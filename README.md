@@ -81,7 +81,6 @@ targeted recovery. They are not required during the normal workflow.
 python3 -m venv .venv
 .venv/bin/pip install -e .
 cp .env.example .env
-chmod 600 .env
 ```
 
 Commands print short status information and the next recommended action. Their
@@ -129,8 +128,8 @@ configuration file:
 .venv/bin/drivershub-migrate --env-file PATH assess
 ```
 
-The migration directory contains personal and operational data. Store it on a
-trusted system and retain its owner-only file permissions.
+The migration directory contains personal and operational data and should be
+kept in the trusted environment used for the migration.
 
 ### Export supported source data
 
