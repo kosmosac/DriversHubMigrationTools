@@ -8,12 +8,12 @@ from drivershub_migration.configuration_writer import import_configuration
 
 
 class ConfigurationWriterTests(unittest.TestCase):
-    @patch(
-        "drivershub_migration.configuration_writer._compressed_asset",
-        return_value="compressed",
-    )
-    def test_retains_destination_integrations_and_imports_branding(self, compressed):
+    def test_retains_destination_integrations_and_imports_branding(self):
         calls = []
+
+        class Compressor:
+            def compress(self, value):
+                return b"compressed:" + value
 
         def runner(command, **kwargs):
             calls.append((command, kwargs))
@@ -75,15 +75,19 @@ class ConfigurationWriterTests(unittest.TestCase):
                 json.dumps({"stages": {"accounts": {"state": "complete"}}})
             )
 
-            result = import_configuration(
-                migration,
-                target,
-                None,
-                mode="aio",
-                database={},
-                writers_stopped=False,
-                runner=runner,
-            )
+            with patch.dict(
+                "sys.modules",
+                {"zstandard": type("Zstd", (), {"ZstdCompressor": Compressor})},
+            ):
+                result = import_configuration(
+                    migration,
+                    target,
+                    None,
+                    mode="aio",
+                    database={},
+                    writers_stopped=False,
+                    runner=runner,
+                )
             written = json.loads((target / "config" / "config.json").read_text())
 
         self.assertEqual(result["state"], "complete")
@@ -95,7 +99,6 @@ class ConfigurationWriterTests(unittest.TestCase):
         sql = calls[-1][1]["input"]
         self.assertNotIn("source-token", sql)
         self.assertNotIn("source-client", sql)
-        compressed.assert_called_once_with(b"image")
 
 
 if __name__ == "__main__":

@@ -15,7 +15,9 @@ unsupported external plugins cannot be transferred. Optional post-migration
 jobs can retrieve delivery details and economy transaction timestamps while
 the source Hub remains reachable.
 
-See [DESIGN.md](DESIGN.md) for the coverage model and technical limitations.
+This release is tested with the Drivers Hub Backend 2.12.1 API and database
+schema. The export and destination validation stop when required data or schema
+elements are incompatible.
 
 ## Requirements
 
@@ -23,6 +25,10 @@ See [DESIGN.md](DESIGN.md) for the coverage model and technical limitations.
 - the API URL of the source Hub, including its prefix
 - a temporary application token created by a source Hub administrator
 - full access to the destination Hub and its MariaDB database
+
+For a Docker AIO migration, running the complete workflow from a root shell is
+recommended. A non-root user is suitable only when it has all required Docker,
+file, and database permissions.
 
 ## Installation
 
@@ -33,9 +39,18 @@ first:
 sudo apt install python3 python3-venv tmux
 ```
 
+For a Docker AIO destination, enter a persistent root shell before cloning the
+repository. The import needs Docker access and must replace
+`config/config.json`. It also updates reports and journals in the migration
+directory. Using the same privileged user for installation, export, import,
+and enrichment prevents mixed file ownership and avoids adding `sudo` to every
+individual command. Remain in this shell until the migration work is complete.
+Skip `sudo -i` when the current user already has every required permission.
+
 Then install the Migration Tools:
 
 ```bash
+sudo -i
 git clone https://github.com/kosmosac/DriversHubMigrationTools.git
 cd DriversHubMigrationTools
 python3 -m venv .venv
@@ -52,6 +67,10 @@ DRIVERSHUB_SOURCE_URL=https://hub.example.com/api/
 DRIVERSHUB_APPLICATION_TOKEN=replace-with-the-source-token
 DRIVERSHUB_MIGRATION_DIRECTORY=migrations/example
 ```
+
+Create a dedicated application token in the source Hub for the migration. Keep
+it available until any optional post-migration enrichment is complete, then
+delete it in the source Hub.
 
 For a Drivers Hub Docker AIO destination, set:
 
@@ -103,11 +122,16 @@ entire stack and archive the deployment directory, which contains the
 database, configuration, and uploaded assets:
 
 ```bash
+mkdir -p /backup
 cd /opt/DriversHubDockerAIO
 docker compose down
-tar -czf /backup/drivershub-$(date +%Y%m%d).tar.gz -C /opt DriversHubDockerAIO
-docker compose up -d
+tar -czf /backup/drivershub-$(date +%Y%m%d).tar.gz \
+  .env config external_plugins data
+docker compose up -d mariadb
 ```
+
+Direct-mode users must add `-f compose.direct.yaml` to these Docker Compose
+commands.
 
 For a direct MariaDB destination, dump the database and copy the backend
 configuration:
@@ -117,21 +141,10 @@ mysqldump -u root -p drivershub > /backup/drivershub-$(date +%Y%m%d).sql
 cp /path/to/config.json /backup/config-$(date +%Y%m%d).json
 ```
 
-After the backup, stop every service that can write to the Hub database while
-leaving MariaDB running. For Docker AIO:
-
-```bash
-docker compose stop backend bannergen db-init
-```
-
-If you want to proceed directly to the import, start only MariaDB after the
-backup instead of the full stack:
-
-```bash
-docker compose up -d db
-```
-
-This avoids restarting services you would stop again immediately.
+The AIO command starts only MariaDB after the backup. Keep the remaining
+services stopped until the import has finished. For a direct MariaDB
+destination, stop every service that can write to the Hub database while
+leaving MariaDB running.
 
 ### 3. Import the migration
 
@@ -145,8 +158,9 @@ Return to the Migration Tools directory and run:
 first time. If the command is interrupted, run it again; completed stages are
 skipped.
 
-For a direct MariaDB destination, also add `--writers-stopped` after stopping
-all destination writers yourself.
+For a direct MariaDB destination, use an account that can write the backend
+configuration and database, and add `--writers-stopped` after stopping all
+destination writers yourself.
 
 ### 4. Start and check the destination
 
@@ -172,6 +186,11 @@ Destination-specific database, Redis, Discord, Steam, SMTP, captcha, webhook,
 tracker, and OAuth values are retained. Imported users keep available Steam,
 Discord, TruckersMP, and email identities. Passwords, MFA enrollment, OAuth
 tokens, and sessions are not transferred.
+
+The source API does not provide deleted deliveries, original poll-vote and task
+creation timestamps, internal economy transaction notes, garage-slot purchase
+prices, merchandise sale prices, or private data owned only by unsupported
+external plugins. These values cannot be restored exactly.
 
 Set `DRIVERSHUB_CONVERT_PERSONAL_NOTES_TO_GLOBAL=true` to import personal
 administrator notes as global administrator notes. Otherwise they are skipped.

@@ -120,10 +120,26 @@ def parser() -> argparse.ArgumentParser:
     import_all_command = commands.add_parser(
         "import-all", help="Validate, import, resume, and verify a destination"
     )
-    import_all_command.add_argument("--output", type=Path)
-    import_all_command.add_argument("--target", type=Path)
-    import_all_command.add_argument("--backup-confirmed", action="store_true")
-    import_all_command.add_argument("--writers-stopped", action="store_true")
+    import_all_command.add_argument(
+        "--output",
+        type=Path,
+        help="migration directory; overrides DRIVERSHUB_MIGRATION_DIRECTORY",
+    )
+    import_all_command.add_argument(
+        "--target",
+        type=Path,
+        help="Docker AIO directory; overrides DRIVERSHUB_TARGET_DIRECTORY",
+    )
+    import_all_command.add_argument(
+        "--backup-confirmed",
+        action="store_true",
+        help="confirm that a verified destination backup exists",
+    )
+    import_all_command.add_argument(
+        "--writers-stopped",
+        action="store_true",
+        help="confirm stopped writers for a direct MariaDB destination",
+    )
     configuration_command = commands.add_parser(
         "import-configuration",
         help="Import portable configuration and branding into a stopped destination",

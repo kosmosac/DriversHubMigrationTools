@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 from .account_import import _sql_value
 from .account_writer import _check_aio_writers, _execute_aio, _execute_mariadb
 from .configuration_plan import create_configuration_plan
-from .storage import atomic_write, read_object, write_json
+from .storage import atomic_write, compress_and_encode, read_object, write_json
 
 
 def _merge_backend(source: dict[str, object], target: dict[str, object]) -> dict[str, object]:
