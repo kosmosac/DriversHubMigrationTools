@@ -7,6 +7,7 @@ from unittest.mock import patch
 from drivershub_migration.enrichment import (
     _Progress,
     _csv_timestamp,
+    _economy_partition_txids,
     _economy_source_userids,
     _economy_user_starts,
     _source_offsets,
@@ -90,6 +91,7 @@ class EnrichmentTests(unittest.TestCase):
                     "total_pages": 1 if records else 0,
                 }))
             self.assertEqual(_economy_source_userids(directory, {1, 2, 3}), {2})
+            self.assertEqual(_economy_partition_txids(directory), {2: {7}})
 
     def test_economy_plan_starts_one_day_before_user_join(self):
         with TemporaryDirectory() as temporary:
@@ -158,7 +160,7 @@ class EnrichmentTests(unittest.TestCase):
             (directory / "export.json").write_text(json.dumps({"created_at": "2024-04-02T00:00:00+00:00"}))
             sql = []
             progress = []
-            pending = iter([[['1']], [['0']]])
+            pending = iter([[['1']], [['9']], [['0']]])
             with (
                 patch("drivershub_migration.enrichment.query_rows", side_effect=lambda *a, **k: next(pending)),
                 patch("drivershub_migration.enrichment.execute_live", side_effect=lambda value, *a, **k: sql.append(value)),
@@ -181,6 +183,45 @@ class EnrichmentTests(unittest.TestCase):
                 "1 destination transactions enriched",
                 progress,
             )
+
+    def test_economy_enrichment_skips_accounts_resolved_by_shared_transactions(self):
+        with TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            import_journal(directory, "economy")
+            normalized = directory / "normalized"
+            normalized.mkdir()
+            (normalized / "economy-balances.json").write_text(json.dumps({"records": [
+                {"userid": -1000}, {"userid": 1},
+            ]}))
+            (normalized / "deliveries.json").write_text(json.dumps({"records": [
+                {"logid": 1, "timestamp": 1711843200},
+            ]}))
+            (normalized / "deliveries-csv.json").write_text(json.dumps({"records": [
+                {"logid": "1", " time_submitted": "2024-03-31 01:00:00"},
+            ]}))
+            for userid in (-1000, 1):
+                partition = directory / f"raw/economy-transactions/userid-{userid}"
+                partition.mkdir(parents=True)
+                (partition / "page-000001.json").write_text(json.dumps({
+                    "list": [{"txid": 9}], "total_items": 1, "total_pages": 1,
+                }))
+            (directory / "export.json").write_text(json.dumps({
+                "created_at": "2024-04-02T00:00:00+00:00",
+            }))
+            progress = []
+            pending = iter([[['1']], [['9']], [['0']]])
+            with (
+                patch("drivershub_migration.enrichment.query_rows", side_effect=lambda *a, **k: next(pending)),
+                patch("drivershub_migration.enrichment.execute_live"),
+                patch("drivershub_migration.enrichment.HttpClient", CsvClient),
+            ):
+                report = enrich_economy_transactions(
+                    directory, Path("/target"), source="https://source/api", token="token",
+                    mode="aio", database={}, progress=progress.append,
+                )
+            self.assertEqual(report["attempted_windows"], 1)
+            self.assertEqual(report["dynamically_skipped_windows"], 1)
+            self.assertTrue(any("Skipped 1 remaining windows for account 1" in line for line in progress))
 
 
 if __name__ == "__main__":

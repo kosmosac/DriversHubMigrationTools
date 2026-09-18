@@ -68,6 +68,11 @@ class _Progress:
         self.processed += 1
         self.show()
 
+    def discard(self, count: int) -> None:
+        """Remove requests that became unnecessary while a run is active."""
+        self.total = max(self.processed, self.total - max(0, count))
+        self.show()
+
 
 def _import_complete(directory: Path, stage: str) -> None:
     try:
@@ -223,26 +228,43 @@ def _source_bounds(directory: Path) -> tuple[int, int]:
     return max(0, min(timestamps) - 86400), end
 
 
+def _economy_partition_txids(directory: Path) -> dict[int, set[int]]:
+    """Map each raw transaction-list partition to the IDs it contained."""
+    raw = directory / "raw" / "economy-transactions"
+    found: dict[int, set[int]] = {}
+    if not raw.is_dir():
+        return found
+    for partition in raw.glob("userid-*"):
+        try:
+            userid = int(partition.name.removeprefix("userid-"))
+        except ValueError:
+            continue
+        txids: set[int] = set()
+        for page_path in partition.glob("page-*.json"):
+            try:
+                page = json.loads(page_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                continue
+            if not isinstance(page, dict) or not isinstance(page.get("list"), list):
+                continue
+            for row in page["list"]:
+                if (
+                    isinstance(row, dict)
+                    and isinstance(row.get("txid"), int)
+                    and not isinstance(row.get("txid"), bool)
+                ):
+                    txids.add(row["txid"])
+        if txids:
+            found[userid] = txids
+    return found
+
+
 def _economy_source_userids(directory: Path, fallback: set[int]) -> set[int]:
     """Return users whose exported transaction history was not empty."""
     raw = directory / "raw" / "economy-transactions"
-    found: set[int] = set()
     if raw.is_dir():
-        for partition in raw.glob("userid-*"):
-            try:
-                userid = int(partition.name.removeprefix("userid-"))
-            except ValueError:
-                continue
-            for page_path in partition.glob("page-*.json"):
-                try:
-                    page = json.loads(page_path.read_text(encoding="utf-8"))
-                except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-                    continue
-                if isinstance(page, dict) and page.get("list"):
-                    found.add(userid)
-                    break
         # An existing raw export is authoritative, including an empty result.
-        return found
+        return set(_economy_partition_txids(directory))
     return fallback
 
 
@@ -341,6 +363,13 @@ def enrich_economy_transactions(
         }
         write_json(directory / "enrichment" / "economy-enrichment.json", report)
         return report
+    pending_txids = {
+        int(row[0]) for row in query_rows(
+            f"SELECT txid FROM economy_transaction WHERE note={_sql_value(ECONOMY_MARKER)};",
+            target_directory, mode=mode, database=database, runner=runner,
+        )
+        if row
+    }
     balance_data = json.loads((directory / "normalized" / "economy-balances.json").read_text(encoding="utf-8"))
     balance_userids = {
         int(row["userid"])
@@ -349,7 +378,12 @@ def enrich_economy_transactions(
         and isinstance(row.get("userid"), int)
         and not isinstance(row.get("userid"), bool)
     }
-    userids = sorted(_economy_source_userids(directory, balance_userids))
+    partition_txids = _economy_partition_txids(directory)
+    source_userids = _economy_source_userids(directory, balance_userids)
+    userids = sorted(
+        userid for userid in source_userids
+        if not partition_txids or partition_txids.get(userid, set()) & pending_txids
+    )
     user_starts = _economy_user_starts(directory)
     start, end = _source_bounds(directory)
     windows = []
@@ -381,11 +415,35 @@ def enrich_economy_transactions(
     progress_state.show()
     attempted = completed_windows = failed = source_rows = candidates = enriched = ambiguous = 0
     current_pending = initial_pending
+    discarded_keys: set[str] = set()
+    exhausted_users: set[int] = set()
     for userid, after, before in windows:
         if limit is not None and attempted >= limit:
             break
         key = f"economy/{userid}/{after}-{before}"
         if journal.completed(key):
+            continue
+        if userid in exhausted_users:
+            continue
+        if partition_txids and not (partition_txids.get(userid, set()) & pending_txids):
+            exhausted_users.add(userid)
+            user_keys = {
+                f"economy/{candidate_userid}/{candidate_after}-{candidate_before}"
+                for candidate_userid, candidate_after, candidate_before in windows
+                if candidate_userid == userid
+                and not journal.completed(
+                    f"economy/{candidate_userid}/{candidate_after}-{candidate_before}"
+                )
+            }
+            discarded_keys.update(user_keys)
+            if limit is None:
+                remaining_capacity = max(0, progress_state.total - progress_state.processed)
+                progress_state.discard(min(len(user_keys), remaining_capacity))
+            if progress:
+                progress(
+                    f"Skipped {len(user_keys)} remaining windows for account {userid}; "
+                    "all of its exported transactions are already enriched"
+                )
             continue
         attempted += 1
         old = journal.entry(key) or {}
@@ -399,6 +457,7 @@ def enrich_economy_transactions(
             rows = list(csv.DictReader(StringIO(response.body.decode("utf-8-sig")), skipinitialspace=True))
             updates: list[str] = []
             seen: set[int] = set()
+            update_txids: set[int] = set()
             for row in rows:
                 txid = int(row["txid"])
                 if txid in seen:
@@ -408,12 +467,14 @@ def enrich_economy_transactions(
                 if timestamp is None:
                     ambiguous += 1
                     continue
+                update_txids.add(txid)
                 updates.append(
                     "UPDATE economy_transaction SET timestamp=" + str(timestamp)
                     + f",note={_sql_value(ECONOMY_ENRICHED_MARKER)} WHERE txid={txid} AND note={_sql_value(ECONOMY_MARKER)};"
                 )
             window_rows = len(seen)
             window_candidates = len(updates)
+            pending_txids.difference_update(update_txids)
             # Keep locks short while the destination Hub is serving requests.
             for offset in range(0, len(updates), 250):
                 statements = ["SET time_zone='+00:00';", "START TRANSACTION;", *updates[offset:offset + 250], "COMMIT;"]
@@ -459,7 +520,7 @@ def enrich_economy_transactions(
     )
     if remaining == 0:
         state = "complete"
-    elif completed_total == len(windows):
+    elif completed_total + len(discarded_keys) == len(windows):
         state = "complete-with-gaps"
         left_to_mark = remaining
         while left_to_mark:
@@ -485,6 +546,7 @@ def enrich_economy_transactions(
         "total_windows": len(windows),
         "source_accounts": len(userids),
         "economy_accounts": len(balance_userids),
+        "dynamically_skipped_windows": len(discarded_keys),
         "failed_windows": failed,
         "source_rows_processed": source_rows,
         "timestamp_candidates": candidates,

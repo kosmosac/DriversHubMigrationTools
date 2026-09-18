@@ -252,7 +252,8 @@ Economy transaction timestamps can be restored from the source CSV exports:
 The source endpoint allows only three requests per minute. This job can
 therefore take a long time for a Hub with many accounts and a long history.
 The request plan excludes accounts without exported transactions and periods
-before each account was created.
+before each account was created. During a run, remaining windows for an account
+are skipped as soon as all of its exported transactions have been restored.
 Timestamps that cannot be matched unambiguously remain unavailable.
 
 ## License
