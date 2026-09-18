@@ -6,6 +6,7 @@ import csv
 from datetime import datetime, timezone
 from io import StringIO
 import json
+import math
 from pathlib import Path
 import subprocess
 import time
@@ -39,17 +40,28 @@ class _Progress:
         self.initial_seconds = initial_seconds
         self.started = time.monotonic()
         self.processed = 0
+        # Gather roughly 30 seconds of observations, but do not make slow
+        # endpoints wait through dozens of rate-limited requests.
+        self.sample_target = max(3, min(25, math.ceil(30 / initial_seconds)))
 
     def show(self) -> None:
         if not self.callback:
             return
         elapsed = time.monotonic() - self.started
-        average = elapsed / self.processed if self.processed else self.initial_seconds
-        eta = average * max(0, self.total - self.processed)
+        observed = elapsed / self.processed if self.processed else 0.0
+        if self.processed < self.sample_target:
+            seconds_per_item = max(self.initial_seconds, observed)
+            eta_label = "provisional ETA"
+        else:
+            # Retries and source load can vary during a long run. Keep a
+            # modest reserve instead of presenting the current mean as exact.
+            seconds_per_item = observed * 1.1
+            eta_label = "ETA"
+        eta = seconds_per_item * max(0, self.total - self.processed)
         percent = 100.0 if self.total == 0 else self.processed * 100.0 / self.total
         self.callback(
             f"Progress {self.processed}/{self.total} ({percent:.1f}%); "
-            f"elapsed {_duration(elapsed)}; ETA {_duration(eta)}"
+            f"elapsed {_duration(elapsed)}; {eta_label} {_duration(eta)}"
         )
 
     def advance(self) -> None:
@@ -95,7 +107,7 @@ def backfill_delivery_details(
     progress_state = _Progress(
         min(len(rows), limit) if limit is not None else len(rows),
         progress,
-        max(request_interval, 0.1),
+        max(request_interval + 0.75, request_interval * 1.1, 0.1),
     )
     progress_state.show()
     completed = failed = unavailable = skipped = attempted = 0
@@ -365,7 +377,7 @@ def enrich_economy_transactions(
             f"Source plan uses {len(userids)} of {len(balance_userids)} economy accounts with exported transactions"
         )
         progress(f"Transactions awaiting enrichment: {initial_pending}")
-    progress_state = _Progress(planned, progress, 20.5)
+    progress_state = _Progress(planned, progress, 21.25)
     progress_state.show()
     attempted = completed_windows = failed = source_rows = candidates = enriched = ambiguous = 0
     current_pending = initial_pending

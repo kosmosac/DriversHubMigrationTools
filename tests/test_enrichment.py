@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from drivershub_migration.enrichment import (
+    _Progress,
     _csv_timestamp,
     _economy_source_userids,
     _economy_user_starts,
@@ -55,6 +56,28 @@ def import_journal(directory, stage):
 
 
 class EnrichmentTests(unittest.TestCase):
+    def test_progress_uses_adaptive_samples_and_marks_provisional_eta(self):
+        output = []
+        with patch("drivershub_migration.enrichment.time.monotonic", side_effect=[0, 1]):
+            fast = _Progress(100, output.append, 1.85)
+            fast.show()
+        self.assertEqual(fast.sample_target, 17)
+        self.assertIn("provisional ETA", output[-1])
+
+        slow = _Progress(100, None, 21.25)
+        self.assertEqual(slow.sample_target, 3)
+
+    def test_progress_adds_reserve_after_sample_is_stable(self):
+        output = []
+        with patch("drivershub_migration.enrichment.time.monotonic", return_value=0):
+            progress = _Progress(10, output.append, 21.25)
+        progress.processed = 3
+        progress.started = 0
+        with patch("drivershub_migration.enrichment.time.monotonic", return_value=60):
+            progress.show()
+        self.assertIn("; ETA 00:02:34", output[-1])
+        self.assertNotIn("provisional ETA", output[-1])
+
     def test_economy_plan_uses_raw_partitions_with_transactions(self):
         with TemporaryDirectory() as temporary:
             directory = Path(temporary)
