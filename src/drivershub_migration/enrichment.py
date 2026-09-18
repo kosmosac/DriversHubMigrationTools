@@ -211,6 +211,53 @@ def _source_bounds(directory: Path) -> tuple[int, int]:
     return max(0, min(timestamps) - 86400), end
 
 
+def _economy_source_userids(directory: Path, fallback: set[int]) -> set[int]:
+    """Return users whose exported transaction history was not empty."""
+    raw = directory / "raw" / "economy-transactions"
+    found: set[int] = set()
+    if raw.is_dir():
+        for partition in raw.glob("userid-*"):
+            try:
+                userid = int(partition.name.removeprefix("userid-"))
+            except ValueError:
+                continue
+            for page_path in partition.glob("page-*.json"):
+                try:
+                    page = json.loads(page_path.read_text(encoding="utf-8"))
+                except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                    continue
+                if isinstance(page, dict) and page.get("list"):
+                    found.add(userid)
+                    break
+        # An existing raw export is authoritative, including an empty result.
+        return found
+    return fallback
+
+
+def _economy_user_starts(directory: Path) -> dict[int, int]:
+    """Map economy user IDs to the earliest time they can have transactions."""
+    path = directory / "normalized" / "profiles.json"
+    if not path.exists():
+        return {}
+    try:
+        records = json.loads(path.read_text(encoding="utf-8")).get("records", [])
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return {}
+    starts: dict[int, int] = {}
+    for row in records:
+        if not isinstance(row, dict):
+            continue
+        userid = row.get("userid")
+        joined = row.get("join_timestamp")
+        if (
+            isinstance(userid, int) and not isinstance(userid, bool)
+            and isinstance(joined, int) and not isinstance(joined, bool)
+            and joined > 0
+        ):
+            starts[userid] = max(0, joined - 86400)
+    return starts
+
+
 def _source_offsets(directory: Path) -> dict[str, int]:
     """Derive source-local UTC offsets from two representations of deliveries."""
     deliveries = json.loads(
@@ -283,15 +330,24 @@ def enrich_economy_transactions(
         write_json(directory / "enrichment" / "economy-enrichment.json", report)
         return report
     balance_data = json.loads((directory / "normalized" / "economy-balances.json").read_text(encoding="utf-8"))
-    userids = sorted({int(row["userid"]) for row in balance_data.get("records", []) if isinstance(row, dict) and isinstance(row.get("userid"), int)})
+    balance_userids = {
+        int(row["userid"])
+        for row in balance_data.get("records", [])
+        if isinstance(row, dict)
+        and isinstance(row.get("userid"), int)
+        and not isinstance(row.get("userid"), bool)
+    }
+    userids = sorted(_economy_source_userids(directory, balance_userids))
+    user_starts = _economy_user_starts(directory)
     start, end = _source_bounds(directory)
     windows = []
-    cursor = start
     span = 90 * 86400
-    while cursor <= end:
-        before = min(end, cursor + span - 1)
-        windows.extend((userid, cursor, before) for userid in userids)
-        cursor = before + 1
+    for userid in userids:
+        cursor = max(start, user_starts.get(userid, start))
+        while cursor <= end:
+            before = min(end, cursor + span - 1)
+            windows.append((userid, cursor, before))
+            cursor = before + 1
     journal = WorkJournal(directory / "enrichment" / "economy")
     client = HttpClient(
         f"Application {token}", minimum_interval=20.5, progress=progress
@@ -304,6 +360,9 @@ def enrich_economy_transactions(
     if progress:
         progress(
             f"Economy enrichment has {len(pending_windows)} remaining source windows; this run will process at most {planned}"
+        )
+        progress(
+            f"Source plan uses {len(userids)} of {len(balance_userids)} economy accounts with exported transactions"
         )
         progress(f"Transactions awaiting enrichment: {initial_pending}")
     progress_state = _Progress(planned, progress, 20.5)
@@ -412,6 +471,8 @@ def enrich_economy_transactions(
         "completed_windows": completed_windows,
         "completed_windows_total": completed_total,
         "total_windows": len(windows),
+        "source_accounts": len(userids),
+        "economy_accounts": len(balance_userids),
         "failed_windows": failed,
         "source_rows_processed": source_rows,
         "timestamp_candidates": candidates,

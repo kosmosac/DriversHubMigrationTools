@@ -6,6 +6,8 @@ from unittest.mock import patch
 
 from drivershub_migration.enrichment import (
     _csv_timestamp,
+    _economy_source_userids,
+    _economy_user_starts,
     _source_offsets,
     backfill_delivery_details,
     enrich_economy_transactions,
@@ -53,6 +55,30 @@ def import_journal(directory, stage):
 
 
 class EnrichmentTests(unittest.TestCase):
+    def test_economy_plan_uses_raw_partitions_with_transactions(self):
+        with TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            raw = directory / "raw/economy-transactions"
+            for userid, records in ((1, []), (2, [{"txid": 7}])):
+                partition = raw / f"userid-{userid}"
+                partition.mkdir(parents=True)
+                (partition / "page-000001.json").write_text(json.dumps({
+                    "list": records, "total_items": len(records),
+                    "total_pages": 1 if records else 0,
+                }))
+            self.assertEqual(_economy_source_userids(directory, {1, 2, 3}), {2})
+
+    def test_economy_plan_starts_one_day_before_user_join(self):
+        with TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            normalized = directory / "normalized"
+            normalized.mkdir()
+            (normalized / "profiles.json").write_text(json.dumps({"records": [
+                {"userid": 2, "join_timestamp": 1700000000},
+                {"userid": 3, "join_timestamp": 0},
+            ]}))
+            self.assertEqual(_economy_user_starts(directory), {2: 1699913600})
+
     def test_derives_only_unambiguous_daily_source_offsets(self):
         with TemporaryDirectory() as temporary:
             directory = Path(temporary)
