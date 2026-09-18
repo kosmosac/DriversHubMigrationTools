@@ -232,7 +232,8 @@ individual writing stage out of order.
 
 The destination may remain online during both optional jobs. They are
 resumable and show progress and an estimated remaining time. Use `--limit N`
-to restrict a run to `N` source requests.
+to restrict a run to `N` source requests. ETAs are approximate and may change
+as response times, retries, and the remaining work become clearer.
 
 Delivery details and telemetry can be restored individually:
 
@@ -254,6 +255,8 @@ therefore take a long time for a Hub with many accounts and a long history.
 The request plan excludes accounts without exported transactions and periods
 before each account was created. During a run, remaining windows for an account
 are skipped as soon as all of its exported transactions have been restored.
+This makes the Economy ETA particularly volatile and useful only as a rough
+orientation.
 Timestamps that cannot be matched unambiguously remain unavailable.
 
 ## License
