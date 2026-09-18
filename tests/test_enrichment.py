@@ -108,6 +108,7 @@ class EnrichmentTests(unittest.TestCase):
             (normalized / "deliveries-csv.json").write_text(json.dumps({"records": [{"logid": "1", " time_submitted": "2024-03-31 01:00:00"}]}))
             (directory / "export.json").write_text(json.dumps({"created_at": "2024-04-02T00:00:00+00:00"}))
             sql = []
+            progress = []
             pending = iter([[['1']], [['0']]])
             with (
                 patch("drivershub_migration.enrichment.query_rows", side_effect=lambda *a, **k: next(pending)),
@@ -118,10 +119,19 @@ class EnrichmentTests(unittest.TestCase):
                     directory, Path("/target"), source="https://source/api", token="token",
                     mode="aio", database={},
                     limit=1,
+                    progress=progress.append,
                 )
             self.assertEqual(report["attempted_windows"], 1)
+            self.assertEqual(report["source_rows_processed"], 1)
+            self.assertEqual(report["timestamp_candidates"], 1)
+            self.assertEqual(report["transactions_enriched"], 1)
             self.assertIn("UPDATE economy_transaction SET timestamp=1711852200", sql[0])
             self.assertIn("WHERE txid=9 AND note=", sql[0])
+            self.assertIn(
+                "Window result: 1 source transactions, 1 timestamp candidates, "
+                "1 destination transactions enriched",
+                progress,
+            )
 
 
 if __name__ == "__main__":

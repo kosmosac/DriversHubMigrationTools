@@ -549,7 +549,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "enrich-economy-transactions":
             print("Economy transaction enrichment run complete.")
             print(f"Source windows attempted: {report.get('attempted_windows', 0)}")
-            print(f"Source rows processed: {report.get('source_rows_processed', 0)}")
+            print(f"Source transactions found: {report.get('source_rows_processed', 0)}")
+            print(f"Timestamp candidates: {report.get('timestamp_candidates', 0)}")
+            print(f"Destination transactions enriched: {report.get('transactions_enriched', 0)}")
             print(f"Ambiguous local timestamps skipped: {report.get('ambiguous_local_timestamps', 0)}")
             print(f"Failed windows: {report.get('failed_windows', 0)}")
             print(f"Transactions still using baseline metadata: {report.get('remaining_transactions', 0)}")

@@ -276,7 +276,8 @@ def enrich_economy_transactions(
             "state": "complete", "attempted_windows": 0,
             "completed_windows": 0, "completed_windows_total": 0,
             "total_windows": 0, "failed_windows": 0,
-            "source_rows_processed": 0, "ambiguous_local_timestamps": 0,
+            "source_rows_processed": 0, "timestamp_candidates": 0,
+            "transactions_enriched": 0, "ambiguous_local_timestamps": 0,
             "remaining_transactions": 0, "unavailable_transactions": 0,
         }
         write_json(directory / "enrichment" / "economy-enrichment.json", report)
@@ -307,7 +308,8 @@ def enrich_economy_transactions(
         progress(f"Transactions awaiting enrichment: {initial_pending}")
     progress_state = _Progress(planned, progress, 20.5)
     progress_state.show()
-    attempted = completed_windows = failed = updated = ambiguous = 0
+    attempted = completed_windows = failed = source_rows = candidates = enriched = ambiguous = 0
+    current_pending = initial_pending
     for userid, after, before in windows:
         if limit is not None and attempted >= limit:
             break
@@ -320,6 +322,7 @@ def enrich_economy_transactions(
         query = urlencode({"after": after, "before": before})
         url = _base(source) + f"economy/balance/{userid}/transactions/export?{query}"
         journal.record(key, {"state": "in_progress", "userid": userid, "after": after, "before": before, "attempts": attempts, "url": url})
+        window_rows = window_candidates = 0
         try:
             response = client.get(url, expect_json=False)
             rows = list(csv.DictReader(StringIO(response.body.decode("utf-8-sig")), skipinitialspace=True))
@@ -338,6 +341,8 @@ def enrich_economy_transactions(
                     "UPDATE economy_transaction SET timestamp=" + str(timestamp)
                     + f",note={_sql_value(ECONOMY_ENRICHED_MARKER)} WHERE txid={txid} AND note={_sql_value(ECONOMY_MARKER)};"
                 )
+            window_rows = len(seen)
+            window_candidates = len(updates)
             # Keep locks short while the destination Hub is serving requests.
             for offset in range(0, len(updates), 250):
                 statements = ["SET time_zone='+00:00';", "START TRANSACTION;", *updates[offset:offset + 250], "COMMIT;"]
@@ -346,7 +351,8 @@ def enrich_economy_transactions(
             atomic_write(raw_path, response.body)
             journal.record(key, {"state": "complete", "userid": userid, "after": after, "before": before, "attempts": attempts, "url": url, "rows": len(seen), "source_sha256": sha256(response.body), "completed_at": datetime.now(timezone.utc).isoformat()})
             completed_windows += 1
-            updated += len(seen)
+            source_rows += window_rows
+            candidates += window_candidates
         except (RequestFailed, ValueError, KeyError, UnicodeDecodeError) as exc:
             response = exc.response if isinstance(exc, RequestFailed) else None
             journal.record(key, {
@@ -360,17 +366,22 @@ def enrich_economy_transactions(
                 raise ValueError(
                     f"The source rejected the application token with HTTP {response.status}"
                 ) from exc
+        previous_pending = current_pending
+        current_pending = int(query_rows(
+            f"SELECT COUNT(*) FROM economy_transaction WHERE note={_sql_value(ECONOMY_MARKER)};",
+            target_directory, mode=mode, database=database, runner=runner,
+        )[0][0])
+        window_enriched = max(0, previous_pending - current_pending)
+        enriched += window_enriched
         progress_state.advance()
         if progress:
-            current_pending = int(query_rows(
-                f"SELECT COUNT(*) FROM economy_transaction WHERE note={_sql_value(ECONOMY_MARKER)};",
-                target_directory, mode=mode, database=database, runner=runner,
-            )[0][0])
+            progress(
+                f"Window result: {window_rows} source transactions, "
+                f"{window_candidates} timestamp candidates, "
+                f"{window_enriched} destination transactions enriched"
+            )
             progress(f"Transactions awaiting enrichment: {current_pending}")
-    remaining = int(query_rows(
-        f"SELECT COUNT(*) FROM economy_transaction WHERE note={_sql_value(ECONOMY_MARKER)};",
-        target_directory, mode=mode, database=database, runner=runner,
-    )[0][0])
+    remaining = current_pending
     completed_total = sum(
         journal.completed(f"economy/{userid}/{after}-{before}")
         for userid, after, before in windows
@@ -402,7 +413,9 @@ def enrich_economy_transactions(
         "completed_windows_total": completed_total,
         "total_windows": len(windows),
         "failed_windows": failed,
-        "source_rows_processed": updated,
+        "source_rows_processed": source_rows,
+        "timestamp_candidates": candidates,
+        "transactions_enriched": enriched,
         "ambiguous_local_timestamps": ambiguous,
         "remaining_transactions": pending,
         "unavailable_transactions": unavailable,
