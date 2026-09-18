@@ -55,7 +55,9 @@ class _Progress:
         else:
             # Retries and source load can vary during a long run. Keep a
             # modest reserve instead of presenting the current mean as exact.
-            seconds_per_item = observed * 1.1
+            # The first request is not rate-limit delayed, so a small sample
+            # must never project a cycle below the known steady-state floor.
+            seconds_per_item = max(self.initial_seconds, observed * 1.1)
             eta_label = "ETA"
         eta = seconds_per_item * max(0, self.total - self.processed)
         percent = 100.0 if self.total == 0 else self.processed * 100.0 / self.total

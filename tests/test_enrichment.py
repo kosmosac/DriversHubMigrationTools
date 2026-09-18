@@ -79,6 +79,16 @@ class EnrichmentTests(unittest.TestCase):
         self.assertIn("; ETA 00:02:34", output[-1])
         self.assertNotIn("provisional ETA", output[-1])
 
+    def test_progress_never_projects_below_rate_limited_cycle(self):
+        output = []
+        with patch("drivershub_migration.enrichment.time.monotonic", return_value=0):
+            progress = _Progress(10, output.append, 21.25)
+        progress.processed = 3
+        progress.started = 0
+        with patch("drivershub_migration.enrichment.time.monotonic", return_value=41):
+            progress.show()
+        self.assertIn("; ETA 00:02:28", output[-1])
+
     def test_economy_plan_uses_raw_partitions_with_transactions(self):
         with TemporaryDirectory() as temporary:
             directory = Path(temporary)
